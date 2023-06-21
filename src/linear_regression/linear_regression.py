@@ -24,8 +24,8 @@ class LinearRegression:
             if i % 100 == 0:
                 print(f"{i} loss {loss}")
             # backward
-            dw = x.T @ error / n_samples  # (m, n)
-            db = error.sum(0) / n_samples  # (n,)
+            dw = x.T @ error / n_samples  # (m, n), x.T'ed to match w.shape
+            db = error.sum(0) / n_samples  # (n,), error summed to match b.shape
             self.w += self.lr * dw
             self.b += self.lr * db
         return self
