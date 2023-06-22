@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 
 
 class ImageNetMini(Dataset):
-    def __init__(self, root_folder: Path, aug) -> None:
+    def __init__(self, root_folder: str | Path, aug) -> None:
         super().__init__()
         self.root_folder = Path(root_folder)
         self.aug = aug
