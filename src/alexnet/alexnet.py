@@ -8,14 +8,16 @@ class AlexNet(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=2),
             nn.ReLU(),
+            nn.LocalResponseNorm(size=5, alpha=1e-4, beta=0.75, k=2),
         )
         self.conv2 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=3, stride=2),  # overlapping pooling from paper
+            nn.MaxPool2d(kernel_size=3, stride=2),
             nn.Conv2d(96, 256, kernel_size=5, padding=2),
             nn.ReLU(),
+            nn.LocalResponseNorm(size=5, alpha=1e-4, beta=0.75, k=2),
         )
         self.conv3 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=3, stride=2),  # overlapping pooling from paper
+            nn.MaxPool2d(kernel_size=3, stride=2),
             nn.Conv2d(256, 384, kernel_size=3, padding=1),
             nn.ReLU(),
         )
@@ -28,7 +30,7 @@ class AlexNet(nn.Module):
             nn.ReLU(),
         )
         self.middle = nn.Sequential(
-            nn.MaxPool2d(kernel_size=3, stride=2),  # overlapping pooling from paper
+            nn.MaxPool2d(kernel_size=3, stride=2),
             nn.Flatten(),
         )
         self.fc1 = nn.Sequential(

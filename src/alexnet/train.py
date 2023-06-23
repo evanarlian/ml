@@ -1,9 +1,8 @@
 from pathlib import Path
 
 import torch
-import torchvision.transforms as T
 from alexnet import AlexNet as MyAlexNet
-from dataset import ImageNetMini
+from dataset import ImageNetMini, get_dataset_mean, make_train_aug, make_val_aug
 from torch import Tensor, nn, optim
 from tqdm.auto import tqdm
 
@@ -24,40 +23,29 @@ def main():
     MOMENTUM = 0.9
     N_EPOCHS = 90
 
-    # data TODO move to file
-    train_aug = T.Compose(
-        [
-            T.Resize(256),
-            T.RandomCrop(224),
-            T.RandomHorizontalFlip(),
-            T.ColorJitter(),
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # TODO match paper
-        ]
+    # get dataset
+    train_dataset_mean = get_dataset_mean(
+        root_folder="data/imagenet-mini/train/",
+        cache_file="src/alexnet/train_img_mean.pt",
     )
-    val_aug = T.Compose(
-        [
-            T.Resize(256),
-            T.CenterCrop(224),
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # TODO
-        ]
-    )
+    train_aug = make_train_aug(train_dataset_mean)
+    val_aug = make_val_aug(train_dataset_mean)  # use train's too to prevent data leak
     train_ds = ImageNetMini("data/imagenet-mini/train/", train_aug)
     val_ds = ImageNetMini("data/imagenet-mini/val/", val_aug)
 
-    # see models
+    # load models
     my_alexnet = MyAlexNet()
     if save_path.exists():
         print(f"Continue training from {save_path}")
         my_alexnet.load_state_dict(torch.load(save_path))
-    my_alexnet.debug_forward(torch.randn(5, 3, 224, 224))
 
     # train model
     my_alexnet.to(device)
     loss_fn = nn.CrossEntropyLoss()
     opt = optim.SGD(my_alexnet.parameters(), LR, MOMENTUM, weight_decay=WEIGHT_DECAY)
-    sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.1)
+    sched = optim.lr_scheduler.ReduceLROnPlateau(
+        opt, mode="min", factor=0.1, patience=30
+    )
     train_loader = train_ds.create_dataloader(BATCH_SIZE, 4, shuffle=True)
     val_loader = val_ds.create_dataloader(BATCH_SIZE, 4, shuffle=False)
     train_loss_counter = []
