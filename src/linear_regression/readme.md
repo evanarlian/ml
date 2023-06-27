@@ -17,4 +17,4 @@ Types of linear regression
 
 # References
 * [Linear regression types](https://stats.stackexchange.com/questions/2358/explain-the-difference-between-multiple-regression-and-multivariate-regression)
->
+* [sklearn linear regression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html)
