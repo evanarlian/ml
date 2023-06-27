@@ -1,23 +1,35 @@
 import numpy as np
-from sklearn.manifold import TSNE
+
 
 class KMeans:
     def __init__(
-        self, n_clusters: int, n_init: int = 10, max_iter: int = 300, tol: float = 1e-4
+        self,
+        n_clusters: int,
+        init: str,
+        n_init: int = 10,
+        max_iter: int = 300,
+        tol: float = 1e-4,
     ):
         self.n_clusters = n_clusters
-        self.n_init = n_init
+        # sklearn's k-means++ is always 1
+        self.init = init
+        self.n_init = 1 if self.init == "k-means++" else n_init
         self.max_iter = max_iter
         self.tol = tol
         self.fitted = False
 
     def _init_cluster_centers(self, x: np.ndarray):
-        """Get random starting cluster centers"""
+        """Create the first clusters based on init"""
+        if self.n_clusters > len(x):
+            raise ValueError("`n_clusters` must be <= num samples")
         # x is (batch, feat) (b, f)
-        mins, maxs = x.min(axis=0), x.max(axis=0)  # (f,)
-        return mins + (maxs - mins) * np.random.random(
-            (self.n_clusters, self.n_features_in_)
-        )  # lerp, (b, f)
+        if self.init == "random":
+            chosen = np.random.choice(len(x), self.n_clusters, replace=False)
+            return x[chosen]
+        elif self.init == "k-means++":
+            assert False, "not implemented"
+        else:
+            raise ValueError("init must be either `random` or `k-means++`")
 
     def _kmeans_loop(self, x, centers) -> tuple:
         """A single kmeans main loop, returns final centers and inertia"""
@@ -36,10 +48,9 @@ class KMeans:
                 centers[cluster_idx] = members.mean(0)  # (f,)
             # frobenius norm
             if np.linalg.norm(last_centers - centers) <= self.tol:
-                print("break because of convergence!", i)
-                last_centers = centers
+                last_centers = centers.copy()
                 break
-            last_centers = centers
+            last_centers = centers.copy()
         # calculate inertia
         inertia = 0.0
         dist = np.sqrt(((x[:, None, :] - last_centers) ** 2).sum(-1))
@@ -75,9 +86,3 @@ class KMeans:
     def transform(self, x):
         """Returns distance from row in x to every cluster centers"""
         pass
-    
-    # def debug_plot(self, x):
-    #     x_reduced = TSNE(n_components=2).fit_transform(x)
-    #     plt.scatter(x_reduced[:, 0], x_reduced[:, 1], c=y_pred)
-        
-    #     plt.show()
