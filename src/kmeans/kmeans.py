@@ -11,12 +11,28 @@ class KMeans:
         tol: float = 1e-4,
     ):
         self.n_clusters = n_clusters
-        # sklearn's k-means++ is always 1
         self.init = init
-        self.n_init = 1 if self.init == "k-means++" else n_init
+        self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
         self.fitted = False
+
+    def _kmeans_plusplus(self, x):
+        # step 1a: select random first centroid
+        selected_idx = [np.random.choice(len(x))]
+        for i in range(1, self.n_clusters):
+            # step 1b: choose next centroid with random choice with weighted probs based
+            # on squared distance from selected vs unselected
+            unselected_idx = np.setdiff1d(np.arange(len(x)), selected_idx)
+            centers = x[selected_idx]  # (i, f)
+            unselected = x[unselected_idx]  # (b-i, f)
+            # select min distance from selectec to all unselected, (b-i,)
+            min_dist_sq = ((unselected[:, None, :] - centers) ** 2).sum(-1).min(-1)
+            # random choice based on normalized min_dist_sq weighting
+            min_dist_sq = min_dist_sq / min_dist_sq.sum()
+            selected_idx.append(np.random.choice(unselected_idx, p=min_dist_sq))
+            # step: 1c: repeat the loop
+        return x[selected_idx]
 
     def _init_cluster_centers(self, x: np.ndarray):
         """Create the first clusters based on init"""
@@ -27,7 +43,7 @@ class KMeans:
             chosen = np.random.choice(len(x), self.n_clusters, replace=False)
             return x[chosen]
         elif self.init == "k-means++":
-            assert False, "not implemented"
+            return self._kmeans_plusplus(x)
         else:
             raise ValueError("init must be either `random` or `k-means++`")
 
@@ -37,9 +53,10 @@ class KMeans:
         # centers is (n_clusters, f)
         last_centers = centers.copy()
         for i in range(self.max_iter):
-            # dist is (b, n_clusters)
-            dist = np.sqrt(((x[:, None, :] - centers) ** 2).sum(-1))
-            closest_idx = dist.argmin(-1)  # (b,)
+            # dist_sq is (b, n_clusters)
+            # HACK distance squared can still work, no need for sqrt
+            dist_sq = ((x[:, None, :] - centers) ** 2).sum(-1)
+            closest_idx = dist_sq.argmin(-1)  # (b,)
             for cluster_idx in range(self.n_clusters):
                 # update cluster center according to the same idx mean
                 members = x[closest_idx == cluster_idx]  # (_, f)
@@ -53,8 +70,8 @@ class KMeans:
             last_centers = centers.copy()
         # calculate inertia
         inertia = 0.0
-        dist = np.sqrt(((x[:, None, :] - last_centers) ** 2).sum(-1))
-        closest_idx = dist.argmin(-1)  # (b,)
+        dist_sq = ((x[:, None, :] - last_centers) ** 2).sum(-1)
+        closest_idx = dist_sq.argmin(-1)  # (b,)
         for cluster_idx in range(self.n_clusters):
             # update cluster center according to the same idx mean
             members = x[closest_idx == cluster_idx]  # (_, f)
@@ -79,8 +96,8 @@ class KMeans:
         """Returns the cluster idx from given x"""
         if not self.fitted:
             raise RuntimeError("KMeans is not fitted")
-        dist = np.sqrt(((x[:, None, :] - self.cluster_centers_) ** 2).sum(-1))
-        closest_idx = dist.argmin(-1)  # (b,)
+        dist_sq = ((x[:, None, :] - self.cluster_centers_) ** 2).sum(-1)
+        closest_idx = dist_sq.argmin(-1)  # (b,)
         return closest_idx
 
     def transform(self, x):
