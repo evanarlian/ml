@@ -27,6 +27,7 @@ class KMeans:
             centers = x[selected_idx]  # (i, f)
             unselected = x[unselected_idx]  # (b-i, f)
             # select min distance from selectec to all unselected, (b-i,)
+            # this is kinda similar to sdf in computer graphics
             min_dist_sq = ((unselected[:, None, :] - centers) ** 2).sum(-1).min(-1)
             # random choice based on normalized min_dist_sq weighting
             min_dist_sq = min_dist_sq / min_dist_sq.sum()
@@ -102,4 +103,5 @@ class KMeans:
 
     def transform(self, x):
         """Returns distance from row in x to every cluster centers"""
-        pass
+        # (b, n_clusters)
+        return np.sqrt(((x[:, None, :] - self.cluster_centers_) ** 2).sum(-1))
