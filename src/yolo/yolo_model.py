@@ -128,6 +128,7 @@ class YoloDetection(nn.Module):
         self.detector = nn.Sequential(
             nn.Linear(1024, 4096),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(4096, self.n_items),
         )
 
