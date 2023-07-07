@@ -11,7 +11,7 @@ def get_pascal_voc_mapping(annotations_dir: Path) -> dict:
         root = ET.parse(xml_path).getroot()
         for detection in root.findall("object"):
             classes.add(detection.find("name").text),
-    mapping = {k: v for k, v in enumerate(sorted(classes))}
+    mapping = {v: k for k, v in enumerate(sorted(classes))}
     return mapping
 
 
@@ -49,4 +49,5 @@ class PascalVocDataset(Dataset):
         annot_path = self.annotation_paths[i]
         parsed = self._parse_xml(annot_path)
         image_path = self.images_dir / parsed["filename"]
+        # TODO load the actual image + aug
         return parsed, image_path
