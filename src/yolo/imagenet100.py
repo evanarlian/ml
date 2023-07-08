@@ -4,6 +4,7 @@ from pathlib import Path
 import albumentations as A
 import numpy as np
 import torch
+from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
@@ -52,7 +53,7 @@ def get_train_val_aug() -> tuple:
             A.ShiftScaleRotate(p=0.5),
             A.RandomBrightnessContrast(p=0.3),
             A.Normalize(),
-            A.pytorch.ToTensorV2(),
+            ToTensorV2(),
         ]
     )
     val_aug = A.Compose(
@@ -60,7 +61,7 @@ def get_train_val_aug() -> tuple:
             A.SmallestMaxSize(256),
             A.CenterCrop(224, 224),
             A.Normalize(),
-            A.pytorch.ToTensorV2(),
+            ToTensorV2(),
         ]
     )
     return train_aug, val_aug
