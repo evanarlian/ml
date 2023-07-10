@@ -1,18 +1,8 @@
-# use accelerate, wandb, torchmetrics
-# overfit one batch
-# maybe just pass the config inside the trainer so it will become clean af (since there are 2 trainers)
-# accelerate config??
-# please please just use fp16 as default and also CUDA, that is the best
-
-import pickle
-
-import numpy as np
 import torch
-import torch.nn.functional as F
 from accelerate import Accelerator
-from IPython import embed
 from torch import nn, optim
 from torch.utils.data import DataLoader
+from torchmetrics import Metric
 from tqdm.auto import tqdm
 
 
@@ -24,17 +14,26 @@ class BackboneTrainer:
         criterion: nn.Module,
         optimizer: optim.Optimizer,
         scheduler: optim.lr_scheduler.LRScheduler,
+        train_metrics: Metric,
+        val_metrics: Metric,
+        val_loss_metric: Metric,
     ):
         self.accelerator = accelerator
         self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
-        # TODO some torchmetrics stuff OR hf evaluate OR accelerate logger
+        # metrics related
+        self.train_metrics = train_metrics
+        self.val_metrics = val_metrics
+        self.val_loss_metric = val_loss_metric
+        self.global_step = 0
+        self.best_loss = float("inf")
 
     def train(self, train_loader: DataLoader):
         self.model.train()
         for batch in (pbar := tqdm(train_loader, desc="train", leave=False)):
+            self.global_step += 1
             image, label = batch["image_tensor"], batch["class_id"]
             logits = self.model(image)
             loss = self.criterion(logits, label)
@@ -42,16 +41,35 @@ class BackboneTrainer:
             self.optimizer.step()
             self.optimizer.zero_grad()
             self.scheduler.step()
-            pbar.set_postfix({"loss": loss.item()})
+            # metrics reporting
+            loss = loss.item()
+            self.train_metrics(logits, label)
+            pbar.set_postfix({"loss": loss})
+            self.train
+            if self.global_step % 50 == 0:
+                self.accelerator.log({"train/loss": loss}, step=self.global_step)
+        # metrics agg
+        self.accelerator.log(self.train_metrics.compute(), step=self.global_step)
+        self.train_metrics.reset()
 
     @torch.no_grad()
-    def val(self, val_loader: DataLoader):
+    def val(self, val_loader: DataLoader) -> float:
         self.model.eval()
         for batch in (pbar := tqdm(val_loader, desc="val", leave=False)):
             image, label = batch["image_tensor"], batch["class_id"]
             logits = self.model(image)
-            loss = self.criterion(logits, label)
-            pbar.set_postfix({"loss": loss.item()})
+            loss = self.criterion(logits, label).item()
+            # metrics reporting
+            self.val_loss_metric(loss)
+            self.val_metrics(logits, label)
+            pbar.set_postfix({"loss": loss})
+        # metrics agg
+        avg_loss = self.val_loss_metric.compute()
+        self.accelerator.log({"val/loss": avg_loss}, step=self.global_step)
+        self.accelerator.log(self.val_metrics.compute(), step=self.global_step)
+        self.val_loss_metric.reset()
+        self.val_metrics.reset()
+        return avg_loss.item()
 
     def fit(
         self,
@@ -60,9 +78,13 @@ class BackboneTrainer:
         n_epochs: int,
     ):
         for epoch in range(1, n_epochs + 1):
-            print(f"{epoch}/{n_epochs}")
+            print(f"epoch {epoch}/{n_epochs}")
             self.train(train_loader)
-            self.val(val_loader)
+            avg_val_loss = self.val(val_loader)
+            if avg_val_loss < self.best_loss:
+                print(f"Found new best loss: {avg_val_loss}")
+                self.best_loss = avg_val_loss
+                self.accelerator.save_state()
 
     def overfit_one_batch(self, train_loader: DataLoader):
         print("🔥 overfitting for one batch 🔥")
@@ -71,11 +93,13 @@ class BackboneTrainer:
         image, label = batch["image_tensor"], batch["class_id"]
         print(image.size())
         print(label)
-        while True:
+        for i in range(999999):
             logits = self.model(image)
             loss = self.criterion(logits, label)
             self.accelerator.backward(loss)
             self.optimizer.step()
             self.optimizer.zero_grad()
             self.scheduler.step()
-            print(loss.item())
+            print(i, loss.item())
+
+    # TODO lr finder make hehe
