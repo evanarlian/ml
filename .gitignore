@@ -1,4 +1,5 @@
 data/
+accelerate_logs/
 *.pt
 
 # Byte-compiled / optimized / DLL files
