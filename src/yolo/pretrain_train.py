@@ -37,6 +37,7 @@ def setup_accelerate(project_root: Path, project_name: str, hparams: dict):
             automatic_checkpoint_naming=True,
             total_limit=1,  # this is a hack for storing the best model
         ),
+        step_scheduler_with_optimizer=True,  # TODO this is not always true
     )
     accelerator.init_trackers(
         project_name=project_name,  # your_name/<project_name> in wandb website
@@ -75,10 +76,24 @@ def main():
     total_steps = len(train_loader) * cfg.N_EPOCHS
     model = YoloPretraining(n_classes=cfg.N_CLASSES)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters())
-    scheduler = optim.lr_scheduler.OneCycleLR(
-        optimizer, max_lr=cfg.MAX_LR, total_steps=total_steps
-    )
+
+    if cfg.OPTIMIZER == "sgd":
+        optimizer = optim.AdamW(model.parameters(), lr=cfg.MAX_LR)
+    elif cfg.OPTIMIZER == "adamw":
+        optimizer = optim.SGD(model.parameters(), lr=cfg.MAX_LR, momentum=0.9)
+    else:
+        raise ValueError("optim choice not supported")
+
+    if cfg.SCHEDULER == "onecycle":
+        scheduler = optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=cfg.MAX_LR, total_steps=total_steps
+        )
+    elif cfg.SCHEDULER is None:
+        scheduler = optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=lambda epoch: 1
+        )  # noop scheduler
+    else:
+        raise ValueError("scheduler choice not supported")
 
     # metrics, have to use dict style if containing >2 of the same metrics
     metrics = MetricCollection(
@@ -128,8 +143,8 @@ def main():
         val_metrics,
         val_loss_metric,
     )
-    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    # trainer.overfit_one_batch(train_loader)
+    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    trainer.overfit_one_batch(train_loader)
     # 100 1.0833674669265747 maxlr=0.1
     # 100 1.9721401258721016e-05 maxlr=0.01
     # 100 1.2867069017374888e-05 maxlr=0.03
