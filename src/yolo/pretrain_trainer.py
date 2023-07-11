@@ -17,12 +17,14 @@ class BackboneTrainer:
         train_metrics: Metric,
         val_metrics: Metric,
         val_loss_metric: Metric,
+        step_scheduler_with_optimizer: bool,
     ):
         self.accelerator = accelerator
         self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
         # metrics related
         self.train_metrics = train_metrics
         self.val_metrics = val_metrics
@@ -41,7 +43,8 @@ class BackboneTrainer:
             self.optimizer.step()
             self.optimizer.zero_grad()
             curr_lr = self.scheduler.get_last_lr()
-            self.scheduler.step()
+            if self.step_scheduler_with_optimizer:
+                self.scheduler.step()
             # metrics reporting
             loss = loss.item()
             self.train_metrics(logits, label)
@@ -50,6 +53,8 @@ class BackboneTrainer:
             if self.global_step % 50 == 0:
                 self.accelerator.log({"train/loss": loss}, step=self.global_step)
                 self.accelerator.log({"train/lr": curr_lr}, step=self.global_step)
+        if not self.step_scheduler_with_optimizer:
+            self.scheduler.step()
         # metrics agg
         self.accelerator.log(self.train_metrics.compute(), step=self.global_step)
         self.train_metrics.reset()

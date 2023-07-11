@@ -1,11 +1,17 @@
-SEED = 123
-TRAIN_BS = 32
-VAL_BS = 32
+SEED = None
+TRAIN_BS = 64
+VAL_BS = 64
 N_WORKERS = 8
-N_EPOCHS = 50
 N_CLASSES = 100  # 100 because of imagenet100
-OPTIMIZER = "sgd"
-SCHEDULER = None
-MAX_LR = 0.1
+
+N_EPOCHS = 80
+MAX_LR = 0.01
+OPTIMIZER = "sgd"  # "sgd", "adamw"
+SGD_MOMENTUM = 0.9
+SGD_NESTEROV = True
+SCHEDULER = "step"  # "step", "onecycle", None
+STEPLR_STEP = 20
+STEPLR_GAMMA = 0.1
+STEP_SCHED_WITH_OPT = SCHEDULER == "onecycle"
 
 hparams = {k.lower(): v for k, v in locals().items() if not k.startswith("__")}
