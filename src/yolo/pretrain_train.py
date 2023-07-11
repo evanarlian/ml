@@ -56,7 +56,7 @@ def main():
     accelerator = setup_accelerate(project_dir, "yolo_pretraining", cfg.hparams)
 
     # load data
-    train_dataset, val_dataset = build_imagenet100()
+    train_dataset, val_dataset = build_imagenet100("data/imagenet100")
     train_loader = train_dataset.create_dataloader(cfg.TRAIN_BS, True, cfg.N_WORKERS)
     val_loader = val_dataset.create_dataloader(cfg.VAL_BS, False, cfg.N_WORKERS)
 

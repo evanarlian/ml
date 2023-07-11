@@ -116,8 +116,8 @@ class ImageNet100(Dataset):
         )
 
 
-def build_imagenet100():
-    imagenet100_path = Path("data/imagenet100")
+def build_imagenet100(imagenet100_path: Path | str):
+    imagenet100_path = Path(imagenet100_path)
     code2id, id2name = get_imagenet100_mappings(imagenet100_path / "Labels.json")
     train_paths, train_codes = get_train_data(imagenet100_path)
     val_paths, val_codes = get_val_data(imagenet100_path)
@@ -128,7 +128,7 @@ def build_imagenet100():
 
 
 def main():
-    train_dataset, val_dataset = build_imagenet100()
+    train_dataset, val_dataset = build_imagenet100("data/imagenet100")
     print(train_dataset)
     print(val_dataset)
 
