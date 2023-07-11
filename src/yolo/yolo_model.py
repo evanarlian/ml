@@ -13,7 +13,8 @@ class Convolutional(nn.Module):
         self.kernel = kernel
         self.stride = stride
         self.padding = kernel // 2
-        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride, self.padding)
+        # bias=False, see here https://twitter.com/karpathy/status/1013245864570073090
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride, self.padding, bias=False)
         self.bn = nn.BatchNorm2d(num_features=out_ch)
         self.leaky = nn.LeakyReLU(negative_slope=0.1)
 
