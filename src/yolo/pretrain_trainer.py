@@ -40,6 +40,7 @@ class BackboneTrainer:
             self.accelerator.backward(loss)
             self.optimizer.step()
             self.optimizer.zero_grad()
+            curr_lr = self.scheduler.get_last_lr()
             self.scheduler.step()
             # metrics reporting
             loss = loss.item()
@@ -48,6 +49,7 @@ class BackboneTrainer:
             self.train
             if self.global_step % 50 == 0:
                 self.accelerator.log({"train/loss": loss}, step=self.global_step)
+                self.accelerator.log({"train/lr": curr_lr}, step=self.global_step)
         # metrics agg
         self.accelerator.log(self.train_metrics.compute(), step=self.global_step)
         self.train_metrics.reset()
@@ -79,6 +81,7 @@ class BackboneTrainer:
     ):
         for epoch in range(1, n_epochs + 1):
             print(f"epoch {epoch}/{n_epochs}")
+            self.accelerator.log({"train/epoch": epoch}, step=self.global_step)
             self.train(train_loader)
             avg_val_loss = self.val(val_loader)
             if avg_val_loss < self.best_loss:
