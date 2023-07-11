@@ -3,7 +3,6 @@ from pathlib import Path
 
 import albumentations as A
 import numpy as np
-import torch
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
@@ -115,3 +114,24 @@ class ImageNet100(Dataset):
             drop_last=False,
             pin_memory=True,
         )
+
+
+def build_imagenet100():
+    imagenet100_path = Path("data/imagenet100")
+    code2id, id2name = get_imagenet100_mappings(imagenet100_path / "Labels.json")
+    train_paths, train_codes = get_train_data(imagenet100_path)
+    val_paths, val_codes = get_val_data(imagenet100_path)
+    train_aug, val_aug = get_train_val_aug()
+    train_dataset = ImageNet100(train_paths, train_codes, code2id, id2name, train_aug)
+    val_dataset = ImageNet100(val_paths, val_codes, code2id, id2name, val_aug)
+    return train_dataset, val_dataset
+
+
+def main():
+    train_dataset, val_dataset = build_imagenet100()
+    print(train_dataset)
+    print(val_dataset)
+
+
+if __name__ == "__main__":
+    main()

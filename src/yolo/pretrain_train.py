@@ -4,13 +4,7 @@ from pathlib import Path
 import pretrain_config as cfg
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration, set_seed
-from imagenet100 import (
-    ImageNet100,
-    get_imagenet100_mappings,
-    get_train_data,
-    get_train_val_aug,
-    get_val_data,
-)
+from imagenet100 import build_imagenet100
 from pretrain_trainer import BackboneTrainer
 from torch import nn, optim
 from torchmetrics import (
@@ -62,13 +56,7 @@ def main():
     accelerator = setup_accelerate(project_dir, "yolo_pretraining", cfg.hparams)
 
     # load data
-    imagenet100_path = Path("data/imagenet100")
-    code2id, id2name = get_imagenet100_mappings(imagenet100_path / "Labels.json")
-    train_paths, train_codes = get_train_data(imagenet100_path)
-    val_paths, val_codes = get_val_data(imagenet100_path)
-    train_aug, val_aug = get_train_val_aug()
-    train_dataset = ImageNet100(train_paths, train_codes, code2id, id2name, train_aug)
-    val_dataset = ImageNet100(val_paths, val_codes, code2id, id2name, val_aug)
+    train_dataset, val_dataset = build_imagenet100()
     train_loader = train_dataset.create_dataloader(cfg.TRAIN_BS, True, cfg.N_WORKERS)
     val_loader = val_dataset.create_dataloader(cfg.VAL_BS, False, cfg.N_WORKERS)
 
@@ -143,8 +131,8 @@ def main():
         val_metrics,
         val_loss_metric,
     )
-    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    trainer.overfit_one_batch(train_loader)
+    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    # trainer.overfit_one_batch(train_loader)
     # 100 1.0833674669265747 maxlr=0.1
     # 100 1.9721401258721016e-05 maxlr=0.01
     # 100 1.2867069017374888e-05 maxlr=0.03
