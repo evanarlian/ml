@@ -105,7 +105,6 @@ class BackboneTrainer:
             self.accelerator.backward(loss)
             self.optimizer.step()
             self.optimizer.zero_grad()
-            self.scheduler.step()
             print(i, loss.item())
 
     # TODO lr finder make hehe
