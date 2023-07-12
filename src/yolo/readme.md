@@ -13,12 +13,33 @@
 * Each grid cells predicts B bboxes (x, y, w, h) plus the confidence, also the C classes probs.
 * Summary, for a single image, the prediction will be S x S x (B * 5 + C)
 
+# Usage
+Download 2 datasets required for this experiment.
+```bash
+./scripts/download_imagenet_100.bash
+./scripts/download_pascal_voc_2012.bash
+```
+Sanity checks.
+```bash
+python src/yolo/imagenet100.py
+python src/yolo/yolo_model.py
+python src/yolo/pascalvoc.py  # TODO wip!
+```
+Modify `pretrain_config.py` and train backbone on ImageNet100.
+```bash
+accelerate launch src/yolo/pretrain_train.py
+```
+Extract just the backbone from pretrained model (essentially removing the classification layer).
+```bash
+python src/yolo/extract_backbone.py <pretrained_path> <output_backbone_path>
+
+# example (using default value for output backbone path)
+python src/yolo/extract_backbone.py src/yolo/accelerate_logs/exp_2023-07-11_22-33-32/checkpoints/checkpoint_20/pytorch_model.bin
+```
+
 # TODO
 * check if huggingface datasets can speed up image data (just like audio mmap)
 * find bottleneck in training
-
-# TODO NOW
-* train on imagenet
 
 # Questions
 * How to init cnn layers and linear layers with leaky relu?
