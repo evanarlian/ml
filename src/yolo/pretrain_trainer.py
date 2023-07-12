@@ -17,14 +17,12 @@ class BackboneTrainer:
         train_metrics: Metric,
         val_metrics: Metric,
         val_loss_metric: Metric,
-        step_scheduler_with_optimizer: bool,
     ):
         self.accelerator = accelerator
         self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
         # metrics related
         self.train_metrics = train_metrics
         self.val_metrics = val_metrics
@@ -42,8 +40,8 @@ class BackboneTrainer:
             self.accelerator.backward(loss)
             self.optimizer.step()
             self.optimizer.zero_grad()
-            curr_lr = self.scheduler.get_last_lr()
-            if self.step_scheduler_with_optimizer:
+            curr_lr = self.scheduler.get_last_lr()[0]  # only 1 optimizer param group
+            if self.accelerator.step_scheduler_with_optimizer:
                 self.scheduler.step()
             # metrics reporting
             loss = loss.item()
@@ -53,7 +51,7 @@ class BackboneTrainer:
             if self.global_step % 50 == 0:
                 self.accelerator.log({"train/loss": loss}, step=self.global_step)
                 self.accelerator.log({"train/lr": curr_lr}, step=self.global_step)
-        if not self.step_scheduler_with_optimizer:
+        if not self.accelerator.step_scheduler_with_optimizer:
             self.scheduler.step()
         # metrics agg
         self.accelerator.log(self.train_metrics.compute(), step=self.global_step)
@@ -86,13 +84,13 @@ class BackboneTrainer:
     ):
         for epoch in range(1, n_epochs + 1):
             print(f"epoch {epoch}/{n_epochs}")
-            self.accelerator.log({"train/epoch": epoch}, step=self.global_step)
             self.train(train_loader)
             avg_val_loss = self.val(val_loader)
             if avg_val_loss < self.best_loss:
                 print(f"Found new best loss: {avg_val_loss}")
                 self.best_loss = avg_val_loss
                 self.accelerator.save_state()
+            self.accelerator.log({"train/epoch": epoch}, step=self.global_step)
 
     def overfit_one_batch(self, train_loader: DataLoader):
         print("🔥 overfitting for one batch 🔥")

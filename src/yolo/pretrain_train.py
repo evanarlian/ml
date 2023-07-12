@@ -140,7 +140,6 @@ def main():
         train_metrics,
         val_metrics,
         val_loss_metric,
-        cfg.STEP_SCHED_WITH_OPT,
     )
     # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
     trainer.overfit_one_batch(train_loader)
