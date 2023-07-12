@@ -141,12 +141,8 @@ def main():
         val_metrics,
         val_loss_metric,
     )
-    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    trainer.overfit_one_batch(train_loader)
-    # 100 1.0833674669265747 maxlr=0.1
-    # 100 1.9721401258721016e-05 maxlr=0.01
-    # 100 1.2867069017374888e-05 maxlr=0.03
-    # 100 3.648481651907787e-05 maxlr=0.001
+    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    # trainer.overfit_one_batch(train_loader)
 
     accelerator.end_training()  # for trackers finalization
 
