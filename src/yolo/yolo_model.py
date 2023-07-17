@@ -143,7 +143,7 @@ class YoloDetection(nn.Module):
         # fmt: off
         x = self.backbone(x); print("after backbone", x.size())
         x = x.permute(0, 2, 3, 1); print("after permute", x.size())
-        x = self.detector(x); print("after conv2fc", x.size())
+        x = self.detector(x); print("after detector", x.size())
         # fmt: off
         return x
 
