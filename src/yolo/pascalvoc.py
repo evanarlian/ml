@@ -140,7 +140,7 @@ class PascalVoc(Dataset):
         # objectness label: (S x S), object present or not
         # bbox label: (S x S x 4), just need 1 bbox because of 1 bbox per grid
         class_label = torch.zeros(self.S, self.S, self.C)
-        objectness_label = torch.zeros(self.S, self.S)  # TODO what is the data type?
+        objectness_label = torch.zeros(self.S, self.S)
         bbox_label = torch.zeros(self.S, self.S, 4)
         grid_sz = 1.0 / self.S
         for class_id, bbox in zip(class_ids, yolo_bboxes):
