@@ -23,7 +23,7 @@ def get_pascal_voc_mapping(annotations_dir: Path) -> dict:
 def get_train_val_aug() -> tuple:
     train_aug = A.Compose(
         [
-            A.Resize(224, 224),
+            A.Resize(448, 448),
             A.HorizontalFlip(p=0.5),
             A.ColorJitter(p=0.5),
             A.ShiftScaleRotate(p=0.5),
@@ -35,11 +35,12 @@ def get_train_val_aug() -> tuple:
     )  # TODO see more BboxParams
     val_aug = A.Compose(
         [
-            A.Resize(224, 224),
+            A.Resize(448, 448),
             A.Normalize(),
             ToTensorV2(),
-        ]
-    )
+        ],
+        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_names"]),
+    )  # TODO see more BboxParams
     return train_aug, val_aug
 
 
@@ -186,8 +187,10 @@ def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
     annot_dir = Path(pascalvoc_dir / "Annotations")
     image_dir = Path(pascalvoc_dir / "JPEGImages")
     mapping = get_pascal_voc_mapping(annot_dir)
-    annot_paths = list(annot_dir.iterdir())
-    train_annots, val_annots = train_test_split(annot_paths, test_size=0.3)
+    annot_paths = sorted(list(annot_dir.iterdir()))
+    train_annots, val_annots = train_test_split(
+        annot_paths, test_size=0.3, shuffle=False
+    )
     train_aug, val_aug = get_train_val_aug()
     train_ds = PascalVoc(train_annots, image_dir, mapping, train_aug, S=S, B=B, C=C)
     val_ds = PascalVoc(val_annots, image_dir, mapping, val_aug, S=S, B=B, C=C)
