@@ -10,7 +10,7 @@ class YoloLoss(nn.Module):
         self.C = C
         self.lambda_coord = lambda_coord
         self.lambda_noobj = lambda_noobj
-        self.mse = nn.MSELoss(reduction="sum")  # summation symbol from paper
+        self.mse = nn.MSELoss(reduction="none")  # we'll sum manually during forward
 
     def forward(
         self,
@@ -19,29 +19,81 @@ class YoloLoss(nn.Module):
         objectness_label: Tensor,
         class_label: Tensor,
     ):
-        # split preds tensor to bboxes and clases
-        # preds: (bs, S, S, (B*5+C)) will become:
-        # * bbox_preds: (bs, S, S, (B*5))
-        # * class_preds: (bs, S, S, C)
-        bbox_preds, class_preds = preds.split([self.B * 5, self.C], dim=-1)
+        # adjust bbox and objectness label tensors so that they have B = 1
+        bbox_label = bbox_label.unsqueeze(-2)
+        objectness_label = objectness_label.unsqueeze(-1)
+        # print(bbox_label.size())
+        # print(objectness_label.size())
+        # print(class_label.size())
+        # print()
 
-        # (B*5) part in bbox_preds makes doing tensor operations painful
-        # just make B to a standalone dimension
-        # bbox_preds: (bs, S, S, (B*5)) -> (bs, S, S, B, 5)
-        bbox_preds = bbox_preds.view(-1, self.S, self.S, self.B, 5)
+        # "match" raw preds dimensions to those 3 labels
+        xywhc_pred, class_pred = preds.split([self.B * 5, self.C], dim=-1)
+        xywhc_pred = xywhc_pred.view(-1, self.S, self.S, self.B, 5)
+        bbox_pred, objectness_pred = xywhc_pred.split([4, 1], dim=-1)
+        objectness_pred = objectness_pred.squeeze(-1)
+        # print(bbox_pred.size())
+        # print(objectness_pred.size())
+        # print(class_pred.size())
+        # print()
 
-        # preds recap:
-        # * bbox_preds: (bs, S, S, B, 5)
-        # * class_preds: (bs, S, S, C)
-        # label recap:
-        # * bbox_label: (bs, S, S, 4)
-        # * objectness_label: (bs, S, S)
-        # * class_label: (bs, S, S, C)
+        # at this point:
+        # * both bbox: (bs, S, S, B|1, 4)
+        # * both objectness: (bs, S, S, B|1)
+        # * both class: (bs, S, S, C)
 
         # calculate iou from bbox pred vs bbox label
-        #
-        # TODO TODO unsqueeze shuld be done manually here, not in the iou
-        # xy_loss = objectness_label *
+        # iou must be in pascalvoc format
+        # we also need responsibility boolean mask based on the max iou
+        # ious: (bs, S, S, B)
+        # resp_mask: (bs, S, S, B)
+        ious = iou(
+            convert_yolo_to_pascalvoc(bbox_label),
+            convert_yolo_to_pascalvoc(bbox_pred),
+        )
+        resp_mask = ious == ious.max(-1).values.unsqueeze(-1)
+        # print(ious.size())
+        # print(resp_mask.size())
+        # print()
+
+        # losses
+        # from paper, 1_obj_ij is resp_mask, 1_obj_i is objectness_label
+        xy_loss = (
+            self.lambda_coord
+            * resp_mask
+            * (
+                self.mse(bbox_label[..., 0], bbox_pred[..., 0])
+                + self.mse(bbox_label[..., 1], bbox_pred[..., 1])
+            )
+        ).sum()
+        wh_loss = (
+            self.lambda_coord
+            * resp_mask
+            * (
+                self.mse(
+                    bbox_label[..., 2].sqrt(),
+                    bbox_pred[..., 2].sign() * bbox_pred[..., 2].abs().sqrt(),
+                )
+                + self.mse(
+                    bbox_label[..., 3].sqrt(),
+                    bbox_pred[..., 3].sign() * bbox_pred[..., 3].abs().sqrt(),
+                )
+            )
+        ).sum()
+        obj_confidence_loss = (
+            resp_mask * self.mse(objectness_label, objectness_pred)
+        ).sum()
+        noobj_confidence_loss = (
+            self.lambda_noobj
+            * resp_mask
+            * (1 - objectness_label)
+            * self.mse(objectness_label, objectness_pred)
+        ).sum()
+        class_loss = (objectness_label * self.mse(class_label, class_pred)).sum()
+        yolo_loss = (
+            xy_loss + wh_loss + obj_confidence_loss + noobj_confidence_loss + class_loss
+        )
+        return yolo_loss
 
 
 def convert_yolo_to_pascalvoc(bboxes: Tensor) -> Tensor:
@@ -110,7 +162,7 @@ def main():
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([1, 1, 9, 9])), t([0.64]))
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([11, 11, 14, 14])), t([0.0]))
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([-5, 5, 5, 15])), t([1 / 7]))
-    print("Passed manual testing")
+    print("Passed iou manual testing")
 
     # fuzz testing vs torchvision implementation
     from torchvision.ops import box_iou
@@ -122,7 +174,7 @@ def main():
         my_iou = iou(pred, label)
         torchvision_iou = box_iou(pred, label)
         assert torch.allclose(my_iou, torchvision_iou)
-    print("Passed fuzz testing")
+    print("Passed iou fuzz testing")
 
 
 if __name__ == "__main__":
