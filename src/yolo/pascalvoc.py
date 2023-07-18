@@ -5,7 +5,7 @@ import albumentations as A
 import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
-from PIL import Image
+from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
@@ -133,7 +133,7 @@ class PascalVoc(Dataset):
         class_ids = [self.mapping[c] for c in parsed["class_names"]]
         pascalvoc_bboxes = transformed["bboxes"]
         yolo_bboxes = [
-            self._pascalvoc_to_yolo_format(bbox, image_pil.size)
+            self._pascalvoc_to_yolo_format(bbox, (448, 448))
             for bbox in pascalvoc_bboxes
         ]
         # construct separate tensors for class label and bbox label
@@ -198,7 +198,7 @@ def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
 
 
 def main():
-    train_dataset, val_dataset = build_pascalvoc("data/pascalvoc2012/voc2012/VOC2012")
+    train_dataset, val_dataset = build_pascalvoc("data/VOC2012")
     print(train_dataset)
     print(val_dataset)
 
