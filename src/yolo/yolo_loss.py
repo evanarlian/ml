@@ -87,10 +87,10 @@ def iou(labels: Tensor, preds: Tensor) -> Tensor:
 
     # calculate the intersection coordinates
     # below shapes: (bs, S, S, B)
-    isect_xmin = torch.max(label_xmin, pred_xmin)
-    isect_ymin = torch.max(label_ymin, pred_ymin)
-    isect_xmax = torch.min(label_xmax, pred_xmax)
-    isect_ymax = torch.min(label_ymax, pred_ymax)
+    isect_xmin = torch.maximum(label_xmin, pred_xmin)
+    isect_ymin = torch.maximum(label_ymin, pred_ymin)
+    isect_xmax = torch.minimum(label_xmax, pred_xmax)
+    isect_ymax = torch.minimum(label_ymax, pred_ymax)
 
     # now we have 4 different areas: label, pred, intersection, union
     # intersection cannot be negative to we clip
@@ -104,11 +104,25 @@ def iou(labels: Tensor, preds: Tensor) -> Tensor:
 
 
 def main():
-    # sanity checks
-    # TODO this is better separeted to pytest
+    # manual testing
     t = torch.tensor
-    ac = torch.allclose
-    assert ac(iou(t([0, 0, 10, 10]), t([0, 0, 10, 10])), t([1.0]))
+    assert torch.allclose(iou(t([0, 0, 10, 10]), t([0, 0, 10, 10])), t([1.0]))
+    assert torch.allclose(iou(t([0, 0, 10, 10]), t([1, 1, 9, 9])), t([0.64]))
+    assert torch.allclose(iou(t([0, 0, 10, 10]), t([11, 11, 14, 14])), t([0.0]))
+    assert torch.allclose(iou(t([0, 0, 10, 10]), t([-5, 5, 5, 15])), t([1 / 7]))
+    print("Passed manual testing")
+
+    # fuzz testing vs torchvision implementation
+    from torchvision.ops import box_iou
+
+    for i in range(5000):
+        point = torch.randn(1, 2)
+        label = torch.cat([point, point + torch.rand(2)], dim=-1)
+        pred = torch.cat([point + torch.rand(2) / 2, point + torch.rand(2)], dim=-1)
+        my_iou = iou(pred, label)
+        torchvision_iou = box_iou(pred, label)
+        assert torch.allclose(my_iou, torchvision_iou)
+    print("Passed fuzz testing")
 
 
 if __name__ == "__main__":
