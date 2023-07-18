@@ -32,7 +32,7 @@ def get_train_val_aug() -> tuple:
             ToTensorV2(),
         ],
         bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_names"]),
-    )
+    )  # TODO see more BboxParams
     val_aug = A.Compose(
         [
             A.Resize(224, 224),
@@ -136,12 +136,12 @@ class PascalVoc(Dataset):
             for bbox in pascalvoc_bboxes
         ]
         # construct separate tensors for class label and bbox label
-        # class label: (S x S x C), need to be one-hot because of mse loss
-        # objectness label: (S x S), object present or not
         # bbox label: (S x S x 4), just need 1 bbox because of 1 bbox per grid
-        class_label = torch.zeros(self.S, self.S, self.C)
-        objectness_label = torch.zeros(self.S, self.S)
+        # objectness label: (S x S), object present or not
+        # class label: (S x S x C), need to be one-hot because of mse loss
         bbox_label = torch.zeros(self.S, self.S, 4)
+        objectness_label = torch.zeros(self.S, self.S)
+        class_label = torch.zeros(self.S, self.S, self.C)
         grid_sz = 1.0 / self.S
         for class_id, bbox in zip(class_ids, yolo_bboxes):
             # fill into the responsible grid
@@ -154,18 +154,19 @@ class PascalVoc(Dataset):
             bbox_label[grid_y, grid_x] = torch.tensor(bbox)
         d = {
             "image_tensor": transformed["image"],
-            "class_label": class_label,
-            "objectness_label": objectness_label,
             "bbox_label": bbox_label,
+            "objectness_label": objectness_label,
+            "class_label": class_label,
         }
         if include_all:
             d |= {
                 "annot_path": annot_path,
                 "image_path": image_path,
-                "image_pil": image_pil,
-                "class_names": class_names,
-                "class_ids": class_ids,
-                "pascalvoc_bboxes": pascalvoc_bboxes,  # useful for plotting
+                "image_pil": image_pil,  # NOT transformed
+                "class_names": class_names,  # transformed
+                "class_ids": class_ids,  # transformed
+                "pascalvoc_bboxes": pascalvoc_bboxes,  # transformed
+                "yolo_bboxes": yolo_bboxes,  # transformed
             }
         return d
 
