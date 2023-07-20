@@ -44,52 +44,79 @@ class YoloLoss(nn.Module):
 
         # calculate iou from bbox pred vs bbox label
         # iou must be in pascalvoc format
-        # we also need responsibility boolean mask based on the max iou
+        # we also need max_ious boolean mask based on the max iou
         # ious: (bs, S, S, B)
-        # resp_mask: (bs, S, S, B)
+        # max_ious: (bs, S, S, B)
         ious = iou(
             convert_yolo_to_pascalvoc(bbox_label),
             convert_yolo_to_pascalvoc(bbox_pred),
         )
-        resp_mask = ious == ious.max(-1).values.unsqueeze(-1)
+        max_ious = ious == ious.max(-1).values.unsqueeze(-1)
         # print(ious.size())
-        # print(resp_mask.size())
+        # print(max_ious.size())
         # print()
 
         # losses
-        # from paper, 1_obj_ij is resp_mask, 1_obj_i is objectness_label
+        # from paper, 1_obj is similar to "who is responsible"
+        # * in bbox-level data, responsible means there is object and max iou
+        # * in grid-level data, responsible means there is object
+        batch_size = preds.size(0)
         xy_loss = (
-            self.lambda_coord
-            * resp_mask
-            * (
-                self.mse(bbox_label[..., 0], bbox_pred[..., 0])
-                + self.mse(bbox_label[..., 1], bbox_pred[..., 1])
+            (
+                self.lambda_coord
+                * max_ious
+                * objectness_label
+                * (
+                    self.mse(bbox_label[..., 0], bbox_pred[..., 0])
+                    + self.mse(bbox_label[..., 1], bbox_pred[..., 1])
+                )
             )
-        ).sum()
+            .view(batch_size, -1)
+            .sum(-1)
+            .mean()
+        )
         wh_loss = (
-            self.lambda_coord
-            * resp_mask
-            * (
-                self.mse(
-                    bbox_label[..., 2].sqrt(),
-                    bbox_pred[..., 2].sign() * bbox_pred[..., 2].abs().sqrt(),
-                )
-                + self.mse(
-                    bbox_label[..., 3].sqrt(),
-                    bbox_pred[..., 3].sign() * bbox_pred[..., 3].abs().sqrt(),
+            (
+                self.lambda_coord
+                * max_ious
+                * objectness_label
+                * (
+                    self.mse(
+                        bbox_label[..., 2].sqrt(),
+                        bbox_pred[..., 2].sign() * bbox_pred[..., 2].abs().sqrt(),
+                    )
+                    + self.mse(
+                        bbox_label[..., 3].sqrt(),
+                        bbox_pred[..., 3].sign() * bbox_pred[..., 3].abs().sqrt(),
+                    )
                 )
             )
-        ).sum()
+            .view(batch_size, -1)
+            .sum(-1)
+            .mean()
+        )
         obj_confidence_loss = (
-            resp_mask * self.mse(objectness_label, objectness_pred)
-        ).sum()
+            (max_ious * objectness_label * self.mse(objectness_label, objectness_pred))
+            .view(batch_size, -1)
+            .sum(-1)
+            .mean()
+        )
         noobj_confidence_loss = (
-            self.lambda_noobj
-            * resp_mask
-            * (1 - objectness_label)
-            * self.mse(objectness_label, objectness_pred)
-        ).sum()
-        class_loss = (objectness_label * self.mse(class_label, class_pred)).sum()
+            (
+                self.lambda_noobj
+                * (1 - (max_ious * objectness_label))
+                * self.mse(objectness_label, objectness_pred)
+            )
+            .view(batch_size, -1)
+            .sum(-1)
+            .mean()
+        )
+        class_loss = (
+            (objectness_label * self.mse(class_label, class_pred))
+            .view(batch_size, -1)
+            .sum(-1)
+            .mean()
+        )
         yolo_loss = (
             xy_loss + wh_loss + obj_confidence_loss + noobj_confidence_loss + class_loss
         )
