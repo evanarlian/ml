@@ -136,7 +136,7 @@ class PascalVoc(Dataset):
             self._pascalvoc_to_yolo_format(bbox, (448, 448))
             for bbox in pascalvoc_bboxes
         ]
-        # construct separate tensors for class label and bbox label
+        # construct separate tensors for class, objectness, and bbox label
         # bbox label: (S x S x 4), just need 1 bbox because of 1 bbox per grid
         # objectness label: (S x S), object present or not
         # class label: (S x S x C), need to be one-hot because of mse loss
@@ -151,7 +151,7 @@ class PascalVoc(Dataset):
             grid_y = int(y_center / grid_sz)
             # NOTE the bbox can be overwritten, only one per grid!
             class_label[grid_y, grid_x, class_id] = 1.0
-            objectness_label[grid_y, grid_x] = 1
+            objectness_label[grid_y, grid_x] = 1.0
             bbox_label[grid_y, grid_x] = torch.tensor(bbox)
         d = {
             "image_tensor": transformed["image"],
