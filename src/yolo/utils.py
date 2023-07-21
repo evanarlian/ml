@@ -1,3 +1,6 @@
+import random
+from collections import OrderedDict
+
 import torch
 from torch import Tensor
 
@@ -27,7 +30,7 @@ def iou(labels: Tensor, preds: Tensor) -> Tensor:
     Calculate iou between labels bboxes and preds bboxes.
     Supports multidimensional inputs as long as they are broadcastable
     and the last dim length is 4.
-    The bboc format is pascalvoc (xyxy)
+    The bbox format is pascalvoc (xyxy).
 
     Args:
         labels (Tensor): Bbox labels with shape [..., 4]
@@ -62,8 +65,34 @@ def iou(labels: Tensor, preds: Tensor) -> Tensor:
     return isect_area / union_area
 
 
-def nms():
-    pass
+def nms(bboxes: Tensor, confidences: Tensor, iou_thresh: float) -> Tensor:
+    """
+    Perform non max supression and will return the selected indices.
+    The bboxes must belong to the same class label (if object detection).
+    The bbox format is pascalvoc (xyxy).
+
+    Args:
+        bboxes (Tensor): Bbox with shape [N, 4]
+        confidences (Tensor): Bbox with shape [N,]
+        iou_thresh (float): Remove bbox with iou >= iou_thresh
+
+    Returns:
+        Tensor: The kept indices after nms
+    """
+    assert bboxes.size(0) == confidences.size(0)
+    assert bboxes.size(1) == 4
+    ious = iou(bboxes, bboxes.unsqueeze(1)).tolist()
+    sorted_indices = confidences.argsort(descending=True).tolist()
+    kept_indices = OrderedDict.fromkeys(sorted_indices)  # we use this for ordered set
+    for i in sorted_indices:
+        if i not in kept_indices:
+            continue
+        for j in sorted_indices:
+            if j not in kept_indices or i == j:
+                continue
+            if ious[i][j] >= iou_thresh:
+                kept_indices.pop(j)
+    return torch.tensor(list(kept_indices.keys()))
 
 
 def average_precision():
@@ -71,25 +100,63 @@ def average_precision():
 
 
 def main():
-    # manual testing
+    seed = 0
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+    from torchvision.ops import box_iou
+    from torchvision.ops import nms as torch_nms
+
+    def generate_fake_bboxes(n: int) -> tuple[Tensor, Tensor, Tensor]:
+        center = torch.randn(n, 2)
+        labels = torch.cat(
+            [center - torch.rand(n, 2), center + torch.rand(n, 2)], dim=-1
+        )
+        preds = torch.cat(
+            [center - torch.rand(n, 2), center + torch.rand(n, 2)], dim=-1
+        )
+        confidences = torch.rand(n)
+        return labels, preds, confidences
+
     t = torch.tensor
+
+    # iou manual testing
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([0, 0, 10, 10])), t([1.0]))
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([1, 1, 9, 9])), t([0.64]))
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([11, 11, 14, 14])), t([0.0]))
     assert torch.allclose(iou(t([0, 0, 10, 10]), t([-5, 5, 5, 15])), t([1 / 7]))
     print("Passed iou manual testing")
 
-    # fuzz testing vs torchvision implementation
-    from torchvision.ops import box_iou
-
-    for i in range(5000):
-        point = torch.randn(1, 2)
-        label = torch.cat([point, point + torch.rand(2)], dim=-1)
-        pred = torch.cat([point + torch.rand(2) / 2, point + torch.rand(2)], dim=-1)
-        my_iou = iou(pred, label)
-        torchvision_iou = box_iou(pred, label)
+    # iou fuzz testing vs torchvision implementation
+    for i in range(100):
+        labels, preds, _ = generate_fake_bboxes(1000)
+        my_iou = iou(preds.unsqueeze(1), labels)  # because torchvision is pairwise
+        torchvision_iou = box_iou(preds, labels)
         assert torch.allclose(my_iou, torchvision_iou)
     print("Passed iou fuzz testing")
+
+    # nms manual testing
+    assert torch.all(
+        nms(
+            t([[0, 0, 10, 10], [0, 0, 9.5, 9.5], [0, 0, 4, 4]]),
+            t([0.7, 0.9, 0.3]),
+            iou_thresh=0.5,
+        )
+        == t([1, 2])
+    )
+    print("Passed nms manual testing")
+
+    # nms fuzz testing vs torchvision implementation
+    for i in range(100):
+        _, preds, confidences = generate_fake_bboxes(n=1000)
+        # prevent birthday attack that can mess with argsort
+        if confidences.unique().size(0) != 1000:
+            continue
+        thresh = random.random()
+        my_kept = nms(preds, confidences, iou_thresh=thresh)
+        torchvision_kept = torch_nms(preds, confidences, iou_threshold=thresh)
+        assert torch.all(my_kept == torchvision_kept)
+    print("Passed nms fuzz testing")
 
 
 if __name__ == "__main__":
