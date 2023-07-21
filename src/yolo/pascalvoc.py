@@ -5,7 +5,7 @@ import albumentations as A
 import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
-from PIL import Image, ImageOps
+from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
@@ -25,9 +25,9 @@ def get_train_val_aug() -> tuple:
         [
             A.Resize(448, 448),
             A.HorizontalFlip(p=0.5),
-            A.ColorJitter(p=0.5),
-            A.ShiftScaleRotate(p=0.5),
-            A.RandomBrightnessContrast(p=0.3),
+            # A.ColorJitter(p=0.5),
+            # A.ShiftScaleRotate(p=0.5),
+            # A.RandomBrightnessContrast(p=0.3),
             A.Normalize(),
             ToTensorV2(),
         ],
@@ -114,7 +114,22 @@ class PascalVoc(Dataset):
             )
         return d
 
-    def __getitem__(self, i, include_all=False):
+    def collate_fn(self, batch: list) -> dict:
+        d = {}
+        d["image_tensor"] = torch.stack([b["image_tensor"] for b in batch])
+        d["bbox_label"] = torch.stack([b["bbox_label"] for b in batch])
+        d["objectness_label"] = torch.stack([b["objectness_label"] for b in batch])
+        d["class_label"] = torch.stack([b["class_label"] for b in batch])
+        d["annot_path"] = [b["annot_path"] for b in batch]
+        d["image_path"] = [b["image_path"] for b in batch]
+        d["image_pil"] = [b["image_pil"] for b in batch]
+        d["class_names"] = [b["class_names"] for b in batch]
+        d["class_ids"] = [b["class_ids"] for b in batch]
+        d["pascalvoc_bboxes"] = [b["pascalvoc_bboxes"] for b in batch]
+        d["yolo_bboxes"] = [b["yolo_bboxes"] for b in batch]
+        return d
+
+    def __getitem__(self, i):
         # parse pascalvoc xml
         annot_path = self.annotation_paths[i]
         parsed = self._parse_xml(annot_path)
@@ -153,22 +168,20 @@ class PascalVoc(Dataset):
             class_label[grid_y, grid_x, class_id] = 1.0
             objectness_label[grid_y, grid_x] = 1.0
             bbox_label[grid_y, grid_x] = torch.tensor(bbox)
+        # most items are transformed, i.e. might be changed because of augmentations
         d = {
             "image_tensor": transformed["image"],
             "bbox_label": bbox_label,
             "objectness_label": objectness_label,
             "class_label": class_label,
+            "annot_path": annot_path,  # NOT transformed
+            "image_path": image_path,  # NOT transformed
+            "image_pil": image_pil,  # NOT transformed
+            "class_names": class_names,
+            "class_ids": class_ids,
+            "pascalvoc_bboxes": pascalvoc_bboxes,
+            "yolo_bboxes": yolo_bboxes,
         }
-        if include_all:
-            d |= {
-                "annot_path": annot_path,
-                "image_path": image_path,
-                "image_pil": image_pil,  # NOT transformed
-                "class_names": class_names,  # transformed
-                "class_ids": class_ids,  # transformed
-                "pascalvoc_bboxes": pascalvoc_bboxes,  # transformed
-                "yolo_bboxes": yolo_bboxes,  # transformed
-            }
         return d
 
     def create_dataloader(self, batch_size: int, shuffle: bool, num_workers: int):
@@ -179,6 +192,7 @@ class PascalVoc(Dataset):
             num_workers=num_workers,
             drop_last=False,
             pin_memory=True,
+            collate_fn=self.collate_fn,
         )
 
 
