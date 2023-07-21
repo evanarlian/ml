@@ -10,14 +10,15 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 
-def get_pascal_voc_mapping(annotations_dir: Path) -> dict:
+def get_pascal_voc_mapping(annotations_dir: Path) -> tuple[dict, dict]:
     classes = set()
     for xml_path in annotations_dir.iterdir():
         root = ET.parse(xml_path).getroot()
         for detection in root.findall("object"):
             classes.add(detection.find("name").text),
-    mapping = {v: k for k, v in enumerate(sorted(classes))}
-    return mapping
+    class2id = {c: i for i, c in enumerate(sorted(classes))}
+    id2class = {i: c for c, i in class2id.items()}
+    return class2id, id2class
 
 
 def get_train_val_aug() -> tuple:
@@ -49,7 +50,7 @@ class PascalVoc(Dataset):
         self,
         annotation_paths: list,
         images_dir: Path,
-        mapping: dict,
+        class2id: dict,
         aug: A.Compose,
         S: int,
         B: int,
@@ -57,12 +58,12 @@ class PascalVoc(Dataset):
     ):
         self.annotation_paths = annotation_paths
         self.images_dir = Path(images_dir)
-        self.mapping = mapping
+        self.class2id = class2id
         self.aug = aug
         self.S = S  # S by S grid
         self.B = B  # bboxes per grid
         self.C = C  # classes per grid
-        assert self.C == len(self.mapping)
+        assert self.C == len(self.class2id)
 
     def __len__(self):
         return len(self.annotation_paths)
@@ -145,7 +146,7 @@ class PascalVoc(Dataset):
             class_names=parsed["class_names"],
         )
         class_names = transformed["class_names"]
-        class_ids = [self.mapping[c] for c in parsed["class_names"]]
+        class_ids = [self.class2id[c] for c in parsed["class_names"]]
         pascalvoc_bboxes = transformed["bboxes"]
         yolo_bboxes = [
             self._pascalvoc_to_yolo_format(bbox, (448, 448))
@@ -200,14 +201,14 @@ def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
     pascalvoc_dir = Path(pascalvoc_dir)
     annot_dir = Path(pascalvoc_dir / "Annotations")
     image_dir = Path(pascalvoc_dir / "JPEGImages")
-    mapping = get_pascal_voc_mapping(annot_dir)
+    class2id, id2class = get_pascal_voc_mapping(annot_dir)
     annot_paths = sorted(list(annot_dir.iterdir()))
     train_annots, val_annots = train_test_split(
         annot_paths, test_size=0.3, shuffle=False
     )
     train_aug, val_aug = get_train_val_aug()
-    train_ds = PascalVoc(train_annots, image_dir, mapping, train_aug, S=S, B=B, C=C)
-    val_ds = PascalVoc(val_annots, image_dir, mapping, val_aug, S=S, B=B, C=C)
+    train_ds = PascalVoc(train_annots, image_dir, class2id, train_aug, S=S, B=B, C=C)
+    val_ds = PascalVoc(val_annots, image_dir, class2id, val_aug, S=S, B=B, C=C)
     return train_ds, val_ds
 
 
