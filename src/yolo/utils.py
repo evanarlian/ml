@@ -120,6 +120,30 @@ def split_yolo_tensor(
     return bbox_pred, objectness_pred, class_pred
 
 
+def get_best_iou(bbox_label: Tensor, bbox_pred: Tensor) -> Tensor:
+    """
+    Selects the bbox with max iou for every grid. This is because the network
+    produces many bboxes per grid, but at the end the best must be seleted.
+    The input must be in yolo format (cxcywh), because the iou calculation
+    will use pascalvoc format automatically.
+
+    Args:
+        bbox_label (Tensor): Bbox tensor with shape [..., B, 4]
+        bbox_pred (Tensor): Bbox tensor with shape [..., 1, 4]
+
+    Returns:
+        Tensor: Boolean mask tensor of the max iou with shape [..., B]
+    """
+    # ious: (bs, S, S, B)
+    # best_iou_mask: (bs, S, S, B)
+    ious = iou(
+        convert_yolo_to_pascalvoc(bbox_label),
+        convert_yolo_to_pascalvoc(bbox_pred),
+    )
+    best_iou_mask = ious == ious.max(-1).values.unsqueeze(-1)
+    return best_iou_mask
+
+
 def main():
     from torchvision.ops import box_iou
     from torchvision.ops import nms as torch_nms
@@ -183,6 +207,13 @@ def main():
     assert objectness.size() == torch.Size([bs, S, S, B])
     assert classes.size() == torch.Size([bs, S, S, C])
     print("Passed yolo tensor split test")
+
+    # bbox responsibility test (test in cxcywh format)
+    bbox_label = t([[0.0, 0.0, 1.0, 1.0]])
+    bbox_pred = t([[0.0, 0.0, 1.1, 1.1], [0.0, 0.0, 1.0, 1.0]])
+    best_iou_mask = get_best_iou(bbox_label, bbox_pred)
+    assert torch.all(best_iou_mask == t([False, True]))
+    print("Passed max iou mask test")
 
 
 if __name__ == "__main__":
