@@ -1,3 +1,4 @@
+import torch
 from torch import Tensor, nn
 from utils import convert_yolo_to_pascalvoc, iou
 
@@ -14,28 +15,16 @@ class YoloLoss(nn.Module):
 
     def forward(
         self,
-        preds: Tensor,
         bbox_label: Tensor,
         objectness_label: Tensor,
         class_label: Tensor,
+        bbox_pred: Tensor,
+        objectness_pred: Tensor,
+        class_pred: Tensor,
     ):
         # adjust bbox and objectness label tensors so that they have B = 1
         bbox_label = bbox_label.unsqueeze(-2)
         objectness_label = objectness_label.unsqueeze(-1)
-        # print(bbox_label.size())
-        # print(objectness_label.size())
-        # print(class_label.size())
-        # print()
-
-        # "match" raw preds dimensions to those 3 labels
-        xywhc_pred, class_pred = preds.split([self.B * 5, self.C], dim=-1)
-        xywhc_pred = xywhc_pred.view(-1, self.S, self.S, self.B, 5)
-        bbox_pred, objectness_pred = xywhc_pred.split([4, 1], dim=-1)
-        objectness_pred = objectness_pred.squeeze(-1)
-        # print(bbox_pred.size())
-        # print(objectness_pred.size())
-        # print(class_pred.size())
-        # print()
 
         # at this point:
         # * both bbox: (bs, S, S, B|1, 4)
@@ -52,15 +41,12 @@ class YoloLoss(nn.Module):
             convert_yolo_to_pascalvoc(bbox_pred),
         )
         max_ious = ious == ious.max(-1).values.unsqueeze(-1)
-        # print(ious.size())
-        # print(max_ious.size())
-        # print()
 
         # losses
         # from paper, 1_obj is similar to "who is responsible"
         # * in bbox-level data, responsible means there is object and max iou
         # * in grid-level data, responsible means there is object
-        batch_size = preds.size(0)
+        batch_size = bbox_pred.size(0)
         xy_loss = (
             (
                 self.lambda_coord
@@ -121,3 +107,34 @@ class YoloLoss(nn.Module):
             xy_loss + wh_loss + obj_confidence_loss + noobj_confidence_loss + class_loss
         )
         return yolo_loss
+
+
+def main():
+    # test yolo loss shapes
+    from utils import split_yolo_tensor
+
+    # fake labels
+    bs, S, B, C = 5, 7, 2, 20
+    yolo_loss = YoloLoss(S, B, C)
+    bbox_label = torch.rand(bs, S, S, 4)
+    objectness_label = torch.rand(bs, S, S)
+    class_label = torch.rand(bs, S, S, C)
+
+    # fake preds
+    preds = torch.randn(bs, S, S, (B * 5 + C))
+    bbox_pred, objectness_pred, class_pred = split_yolo_tensor(preds, S, B, C)
+
+    # calc loss
+    loss = yolo_loss(
+        bbox_label,
+        objectness_label,
+        class_label,
+        bbox_pred,
+        objectness_pred,
+        class_pred,
+    )
+    print(loss)
+
+
+if __name__ == "__main__":
+    main()
