@@ -26,7 +26,7 @@ def get_train_val_aug() -> tuple:
         [
             A.Resize(448, 448),
             A.HorizontalFlip(p=0.5),
-            # A.ColorJitter(p=0.5),
+            # A.ColorJitter(p=0.5), # TODO
             # A.ShiftScaleRotate(p=0.5),
             # A.RandomBrightnessContrast(p=0.3),
             A.Normalize(),
@@ -51,6 +51,7 @@ class PascalVoc(Dataset):
         annotation_paths: list,
         images_dir: Path,
         class2id: dict,
+        id2class: dict,
         aug: A.Compose,
         S: int,
         B: int,
@@ -59,10 +60,11 @@ class PascalVoc(Dataset):
         self.annotation_paths = annotation_paths
         self.images_dir = Path(images_dir)
         self.class2id = class2id
+        self.id2class = id2class
         self.aug = aug
-        self.S = S  # S by S grid
-        self.B = B  # bboxes per grid
-        self.C = C  # classes per grid
+        self.S = S
+        self.B = B
+        self.C = C
         assert self.C == len(self.class2id)
 
     def __len__(self):
@@ -207,15 +209,21 @@ def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
         annot_paths, test_size=0.3, shuffle=False
     )
     train_aug, val_aug = get_train_val_aug()
-    train_ds = PascalVoc(train_annots, image_dir, class2id, train_aug, S=S, B=B, C=C)
-    val_ds = PascalVoc(val_annots, image_dir, class2id, val_aug, S=S, B=B, C=C)
-    return train_ds, val_ds
+    train_ds = PascalVoc(
+        train_annots, image_dir, class2id, id2class, train_aug, S=S, B=B, C=C
+    )
+    val_ds = PascalVoc(
+        val_annots, image_dir, class2id, id2class, val_aug, S=S, B=B, C=C
+    )
+    return train_ds, val_ds, class2id, id2class
 
 
 def main():
-    train_dataset, val_dataset = build_pascalvoc("data/VOC2012")
+    train_dataset, val_dataset, class2id, id2class = build_pascalvoc("data/VOC2012")
     print(train_dataset)
     print(val_dataset)
+    print(class2id)
+    print(id2class)
 
 
 if __name__ == "__main__":

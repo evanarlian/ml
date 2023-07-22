@@ -1,7 +1,6 @@
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import detection_config as cfg
 import torch
@@ -58,7 +57,7 @@ def main():
     accelerator = setup_accelerate(project_dir, "yolo_detection", cfg.hparams)
 
     # load data
-    train_dataset, val_dataset = build_pascalvoc("data/VOC2012")
+    train_dataset, val_dataset, class2id, id2class = build_pascalvoc("data/VOC2012")
     train_loader = train_dataset.create_dataloader(cfg.TRAIN_BS, True, cfg.N_WORKERS)
     val_loader = val_dataset.create_dataloader(cfg.VAL_BS, False, cfg.N_WORKERS)
 
@@ -124,10 +123,15 @@ def main():
         criterion,
         optimizer,
         scheduler,
+        class2id,
+        id2class,
+        cfg.hparams,
+        None,  # train_map_metric,
+        None,  # val_map_metric,
         val_loss_metric,
     )
-    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    # trainer.overfit_one_batch(train_loader)
+    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    trainer.overfit_one_batch(train_loader)
 
     accelerator.end_training()  # for trackers finalization
 

@@ -101,8 +101,8 @@ def split_yolo_tensor(
     """
     Splits yolo prediction tensor (bs, S, S, (B*5+C)) to 3 tensors:
     * Bbox tensor (bs, S, S, B, 4)
-    * Objectness tensor (bs, S, S, B)  # TODO ini mau ada 1 nya atau ga?
-    * Class tensor (bs, S, S, C)  # TODO ini mau ada 1 nya atau ga?
+    * Objectness tensor (bs, S, S, B)
+    * Class tensor (bs, S, S, C)
 
     Args:
         preds (Tensor): Raw yolo predictions
