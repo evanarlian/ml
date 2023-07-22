@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor, nn
-from utils import convert_yolo_to_pascalvoc, iou
+from utils import get_best_iou
 
 
 class YoloLoss(nn.Module):
@@ -31,16 +31,8 @@ class YoloLoss(nn.Module):
         # * both objectness: (bs, S, S, B|1)
         # * both class: (bs, S, S, C)
 
-        # calculate iou from bbox pred vs bbox label
-        # iou must be in pascalvoc format
-        # we also need max_ious boolean mask based on the max iou
-        # ious: (bs, S, S, B)
         # max_ious: (bs, S, S, B)
-        ious = iou(
-            convert_yolo_to_pascalvoc(bbox_label),
-            convert_yolo_to_pascalvoc(bbox_pred),
-        )
-        max_ious = ious == ious.max(-1).values.unsqueeze(-1)
+        max_ious = get_best_iou(bbox_label, bbox_pred)
 
         # losses
         # from paper, 1_obj is similar to "who is responsible"
