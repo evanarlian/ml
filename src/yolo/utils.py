@@ -95,15 +95,32 @@ def nms(bboxes: Tensor, confidences: Tensor, iou_thresh: float) -> Tensor:
     return torch.tensor(list(kept_indices.keys()))
 
 
-def average_precision():
-    pass
+def split_yolo_tensor(
+    preds: Tensor, S: int, B: int, C: int
+) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    Splits yolo prediction tensor (bs, S, S, (B*5+C)) to 3 tensors:
+    * Bbox tensor (bs, S, S, B, 4)
+    * Objectness tensor (bs, S, S, B)  # TODO ini mau ada 1 nya atau ga?
+    * Class tensor (bs, S, S, C)  # TODO ini mau ada 1 nya atau ga?
+
+    Args:
+        preds (Tensor): Raw yolo predictions
+        S (int): S by S grid
+        B (int): Bbox per grid
+        C (int): Num classes
+
+    Returns:
+        tuple[Tensor, Tensor, Tensor]: Bbox, objectness, class tensors
+    """
+    xywhc_pred, class_pred = preds.split([B * 5, C], dim=-1)
+    xywhc_pred = xywhc_pred.view(-1, S, S, B, 5)
+    bbox_pred, objectness_pred = xywhc_pred.split([4, 1], dim=-1)
+    objectness_pred = objectness_pred.squeeze(-1)
+    return bbox_pred, objectness_pred, class_pred
 
 
 def main():
-    seed = 0
-    random.seed(seed)
-    torch.manual_seed(seed)
-
     from torchvision.ops import box_iou
     from torchvision.ops import nms as torch_nms
 
@@ -157,6 +174,15 @@ def main():
         torchvision_kept = torch_nms(preds, confidences, iou_threshold=thresh)
         assert torch.all(my_kept == torchvision_kept)
     print("Passed nms fuzz testing")
+
+    # yolo tensor split test
+    bs, S, B, C = 5, 7, 2, 20
+    preds = torch.randn(bs, S, S, B * 5 + C)
+    bbox, objectness, classes = split_yolo_tensor(preds, S, B, C)
+    assert bbox.size() == torch.Size([bs, S, S, B, 4])
+    assert objectness.size() == torch.Size([bs, S, S, B])
+    assert classes.size() == torch.Size([bs, S, S, C])
+    print("Passed yolo tensor split test")
 
 
 if __name__ == "__main__":
