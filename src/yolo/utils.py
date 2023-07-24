@@ -128,19 +128,23 @@ def get_best_iou(bbox_label: Tensor, bbox_pred: Tensor) -> Tensor:
     will use pascalvoc format automatically.
 
     Args:
-        bbox_label (Tensor): Bbox tensor with shape [..., B, 4]
-        bbox_pred (Tensor): Bbox tensor with shape [..., 1, 4]
+        bbox_label (Tensor): Bbox tensor with shape [..., 1, 4]
+        bbox_pred (Tensor): Bbox tensor with shape [..., B, 4]
 
     Returns:
         Tensor: Boolean mask tensor of the max iou with shape [..., B]
     """
     # ious: (bs, S, S, B)
     # best_iou_mask: (bs, S, S, B)
+    B = bbox_pred.size(-2)
     ious = iou(
         convert_yolo_to_pascalvoc(bbox_label),
         convert_yolo_to_pascalvoc(bbox_pred),
     )
+    # we must use argmax and eye do tiebreaking (commonly found on all B ious are 0)
     best_iou_mask = ious == ious.max(-1).values.unsqueeze(-1)
+    best_iou_mask = best_iou_mask.int().argmax(-1)
+    best_iou_mask = torch.eye(B, device=best_iou_mask.device)[best_iou_mask].bool()
     return best_iou_mask
 
 

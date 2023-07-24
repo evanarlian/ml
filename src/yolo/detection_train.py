@@ -9,7 +9,8 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from detection_trainer import DetectorTrainer
 from pascalvoc import build_pascalvoc
 from torch import optim
-from torchmetrics import MeanMetric
+from torchmetrics import MeanMetric, MetricCollection
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from yolo_loss import YoloLoss
 from yolo_model import YoloDetection
 
@@ -64,7 +65,8 @@ def main():
     # prepare training
     total_steps = len(train_loader) * cfg.N_EPOCHS
     model = YoloDetection(B=cfg.B, C=cfg.C)
-    model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))  # using pretrained
+    if cfg.BACKBONE_PATH is not None:
+        model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))  # using pretrained
     if cfg.FREEZE_BACKBONE:
         model.backbone.requires_grad_(False)
     criterion = YoloLoss(S=cfg.S, B=cfg.B, C=cfg.C)
@@ -95,6 +97,9 @@ def main():
         raise ValueError("scheduler choice not supported")
 
     # metrics
+    map_metric = MetricCollection([MeanAveragePrecision(box_format="cxcywh")])
+    train_map_metric = map_metric.clone(prefix="train/")
+    val_map_metric = map_metric.clone(prefix="val/")
     val_loss_metric = MeanMetric()
 
     # accelerator wraps everything
@@ -105,6 +110,8 @@ def main():
         scheduler,
         train_loader,
         val_loader,
+        train_map_metric,
+        val_map_metric,
         val_loss_metric,
     ) = accelerator.prepare(
         model,
@@ -113,6 +120,8 @@ def main():
         scheduler,
         train_loader,
         val_loader,
+        train_map_metric,
+        val_map_metric,
         val_loss_metric,
     )
 
@@ -126,8 +135,8 @@ def main():
         class2id,
         id2class,
         cfg.hparams,
-        None,  # train_map_metric,
-        None,  # val_map_metric,
+        train_map_metric,
+        val_map_metric,
         val_loss_metric,
     )
     # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
