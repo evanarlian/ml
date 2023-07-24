@@ -155,22 +155,22 @@ class PascalVoc(Dataset):
             for bbox in pascalvoc_bboxes
         ]
         # construct separate tensors for class, objectness, and bbox label
-        # bbox label: (S x S x 4), just need 1 bbox because of 1 bbox per grid
-        # objectness label: (S x S), object present or not
+        # there are extra dimension with length 1 to enable easy broadcasting
+        # bbox label: (S x S x 1 x 4), just need 1 bbox because of 1 bbox per grid
+        # objectness label: (S x S x 1), object present or not
         # class label: (S x S x C), need to be one-hot because of mse loss
-        bbox_label = torch.zeros(self.S, self.S, 4)
-        objectness_label = torch.zeros(self.S, self.S)
+        bbox_label = torch.zeros(self.S, self.S, 1, 4)
+        objectness_label = torch.zeros(self.S, self.S, 1)
         class_label = torch.zeros(self.S, self.S, self.C)
-        grid_sz = 1.0 / self.S
         for class_id, bbox in zip(class_ids, yolo_bboxes):
             # fill into the responsible grid
             x_center, y_center, bbox_width, bbox_height = bbox
-            grid_x = int(x_center / grid_sz)
-            grid_y = int(y_center / grid_sz)
-            # NOTE the bbox can be overwritten, only one per grid!
+            grid_x = int(x_center * self.S)
+            grid_y = int(y_center * self.S)
+            # NOTE the bbox can be overwritten, since only one per grid
+            bbox_label[grid_y, grid_x, 0] = torch.tensor(bbox)
+            objectness_label[grid_y, grid_x, 0] = 1.0
             class_label[grid_y, grid_x, class_id] = 1.0
-            objectness_label[grid_y, grid_x] = 1.0
-            bbox_label[grid_y, grid_x] = torch.tensor(bbox)
         # most items are transformed, i.e. might be changed because of augmentations
         d = {
             "image_tensor": transformed["image"],

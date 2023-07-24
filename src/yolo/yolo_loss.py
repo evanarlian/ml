@@ -22,10 +22,6 @@ class YoloLoss(nn.Module):
         objectness_pred: Tensor,
         class_pred: Tensor,
     ):
-        # adjust bbox and objectness label tensors so that they have B = 1
-        bbox_label = bbox_label.unsqueeze(-2)
-        objectness_label = objectness_label.unsqueeze(-1)
-
         # at this point:
         # * both bbox: (bs, S, S, B|1, 4)
         # * both objectness: (bs, S, S, B|1)
