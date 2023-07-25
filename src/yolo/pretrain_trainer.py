@@ -47,7 +47,6 @@ class BackboneTrainer:
             loss = loss.item()
             self.train_metrics(logits, label)
             pbar.set_postfix({"loss": loss})
-            self.train
             if self.global_step % 50 == 0:
                 self.accelerator.log({"train/loss": loss}, step=self.global_step)
                 self.accelerator.log({"train/lr": curr_lr}, step=self.global_step)
@@ -106,5 +105,3 @@ class BackboneTrainer:
             self.optimizer.step()
             self.optimizer.zero_grad()
             print(i, loss.item())
-
-    # TODO lr finder make hehe

@@ -100,11 +100,13 @@ class YoloPretraining(nn.Module):
         super().__init__()
         self.n_classes = n_classes
         self.backbone = YoloBackbone()
+        self.pooling = nn.AvgPool2d(4)
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(1024 * 4 * 4, n_classes)
+        self.fc = nn.Linear(1024, n_classes)
 
     def forward(self, x):
         x = self.backbone(x)
+        x = self.pooling(x)
         x = self.flatten(x)
         x = self.fc(x)
         return x
@@ -112,6 +114,7 @@ class YoloPretraining(nn.Module):
     def debug_forward(self, x):
         # fmt: off
         x = self.backbone(x); print("after backbone", x.size())
+        x = self.pooling(x); print("after pooling", x.size())
         x = self.flatten(x); print("after flatten", x.size())
         x = self.fc(x); print("after fc", x.size())
         # fmt: off
