@@ -104,8 +104,8 @@ def main():
     # fake labels
     bs, S, B, C = 5, 7, 2, 20
     yolo_loss = YoloLoss(S, B, C)
-    bbox_label = torch.rand(bs, S, S, 4)
-    objectness_label = torch.rand(bs, S, S)
+    bbox_label = torch.rand(bs, S, S, 1, 4)
+    objectness_label = torch.rand(bs, S, S, 1)
     class_label = torch.rand(bs, S, S, C)
 
     # fake preds
