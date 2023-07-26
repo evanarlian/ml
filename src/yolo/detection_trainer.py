@@ -92,27 +92,7 @@ class DetectorTrainer:
                     "labels": class_label_masked,
                 }
             )
-        # raise RuntimeError("ASd")
-        try:
-            retval = metric(pred_list, target_list)
-        except Exception as e:
-            torch.save(
-                [
-                    bbox_label,
-                    objectness_label,
-                    class_label,
-                    bbox_pred,
-                    objectness_pred,
-                    class_pred,
-                    best_iou_mask,
-                    resp_mask,
-                    pred_list,
-                    target_list,
-                ],
-                "asd.pickle",
-            )
-            raise e
-        return retval
+        return metric(pred_list, target_list)
 
     def single_step(self, batch: dict) -> tuple[Tensor, Tensor]:
         # single step shared by train and val
@@ -186,7 +166,7 @@ class DetectorTrainer:
                 self.accelerator.save_state()
             self.accelerator.log({"train/epoch": epoch}, step=self.global_step)
 
-    def overfit_one_batch(self, train_loader: DataLoader):
+    def overfit_one_batch(self, train_loader: DataLoader, scheduler_step: bool):
         print("🔥 overfitting for one batch 🔥")
         self.model.train()
         batch = next(iter(train_loader))
@@ -195,11 +175,10 @@ class DetectorTrainer:
         print("objectness_label", batch["objectness_label"].size())
         print("class_label", batch["class_label"].size())
         for i in range(999999):
-            if i == 100:
-                print("UNFREEZE!!!!!!!!!!!")
-                self.model.backbone.requires_grad_(True)
             loss, preds = self.single_step(batch)
             self.accelerator.backward(loss)
             self.optimizer.step()
             self.optimizer.zero_grad()
+            if scheduler_step:
+                self.scheduler.step()
             print(i, loss.item())

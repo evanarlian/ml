@@ -13,6 +13,7 @@ from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from yolo_loss import YoloLoss
 from yolo_model import YoloDetection
+from yolo_scheduler import YoloScheduler
 
 # filter out the broadcasting warning in mse loss
 warnings.filterwarnings(
@@ -63,10 +64,9 @@ def main():
     val_loader = val_dataset.create_dataloader(cfg.VAL_BS, False, cfg.N_WORKERS)
 
     # prepare training
-    total_steps = len(train_loader) * cfg.N_EPOCHS
     model = YoloDetection(B=cfg.B, C=cfg.C)
     if cfg.BACKBONE_PATH is not None:
-        model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))  # using pretrained
+        model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))
     if cfg.FREEZE_BACKBONE:
         model.backbone.requires_grad_(False)
     criterion = YoloLoss(S=cfg.S, B=cfg.B, C=cfg.C)
@@ -88,7 +88,22 @@ def main():
     # scheduler
     if cfg.SCHEDULER == "onecycle":
         scheduler = optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=cfg.MAX_LR, total_steps=total_steps
+            optimizer,
+            max_lr=cfg.MAX_LR,
+            epochs=cfg.N_EPOCHS,
+            steps_per_epoch=len(train_loader),
+            anneal_strategy="linear",
+        )
+    elif cfg.SCHEDULER == "yolo":
+        if cfg.N_EPOCHS < 135:
+            warnings.warn(
+                f"🔔 Yolov1 uses 135 epochs. By using less than that ({cfg.N_EPOCHS}), "
+                "the learning rate scheduler will not be fully completed."
+            )
+        scheduler = YoloScheduler(
+            optimizer,
+            epochs=cfg.N_EPOCHS,
+            steps_per_epoch=len(train_loader),
         )
     elif cfg.SCHEDULER is None:
         # noop scheduler
@@ -140,7 +155,7 @@ def main():
         val_loss_metric,
     )
     # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    trainer.overfit_one_batch(train_loader)
+    trainer.overfit_one_batch(train_loader, scheduler_step=True)
 
     accelerator.end_training()  # for trackers finalization
 

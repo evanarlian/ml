@@ -22,10 +22,11 @@ Download 2 datasets required for this experiment.
 Sanity checks.
 ```bash
 python src/yolo/imagenet100.py
-python src/yolo/yolo_model.py
 python src/yolo/pascalvoc.py
-python src/yolo/yolo_loss.py
 python src/yolo/utils.py
+python src/yolo/yolo_model.py
+python src/yolo/yolo_loss.py
+python src/yolo/yolo_scheduler.py
 ```
 Modify `pretrain_config.py` and train backbone on ImageNet100.
 ```bash
