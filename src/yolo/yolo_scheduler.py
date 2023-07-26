@@ -4,10 +4,17 @@ from torch.optim.lr_scheduler import LRScheduler
 
 class YoloScheduler(LRScheduler):
     def __init__(
-        self, optimizer, epochs, steps_per_epoch, last_epoch=-1, verbose=False
+        self,
+        optimizer,
+        epochs,
+        steps_per_epoch,
+        divider=5.0,
+        last_epoch=-1,
+        verbose=False,
     ):
         self.epochs = epochs
         self.steps_per_epoch = steps_per_epoch
+        self.divider = divider
         self.curr_step = -1  # -1 because below init will actually call step once
         super().__init__(optimizer, last_epoch, verbose)
 
@@ -27,7 +34,8 @@ class YoloScheduler(LRScheduler):
         else:
             # actually yolov1 does not use more than 135 epochs
             lr = 1e-4
-        return [lr] * len(self.base_lrs)
+        # for some reason the model gradient is always exploding if not reduced
+        return [lr / self.divider] * len(self.base_lrs)
 
 
 def main():

@@ -104,6 +104,7 @@ def main():
             optimizer,
             epochs=cfg.N_EPOCHS,
             steps_per_epoch=len(train_loader),
+            divider=cfg.YOLO_SCHED_DIVIDER,
         )
     elif cfg.SCHEDULER is None:
         # noop scheduler
@@ -154,8 +155,8 @@ def main():
         val_map_metric,
         val_loss_metric,
     )
-    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    trainer.overfit_one_batch(train_loader, scheduler_step=True)
+    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    # trainer.overfit_one_batch(train_loader, scheduler_step=True)
 
     accelerator.end_training()  # for trackers finalization
 
