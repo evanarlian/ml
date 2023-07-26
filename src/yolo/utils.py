@@ -136,15 +136,16 @@ def get_best_iou(bbox_label: Tensor, bbox_pred: Tensor) -> Tensor:
     """
     # ious: (bs, S, S, B)
     # best_iou_mask: (bs, S, S, B)
-    B = bbox_pred.size(-2)
     ious = iou(
         convert_yolo_to_pascalvoc(bbox_label),
         convert_yolo_to_pascalvoc(bbox_pred),
     )
-    # we must use argmax and eye do tiebreaking (commonly found on all B ious are 0)
     best_iou_mask = ious == ious.max(-1).values.unsqueeze(-1)
-    best_iou_mask = best_iou_mask.int().argmax(-1)
-    best_iou_mask = torch.eye(B, device=best_iou_mask.device)[best_iou_mask].bool()
+    # UNUSED but might be useful in the future
+    # we must use argmax and eye do tiebreaking (commonly found on all B ious are 0)
+    # B = bbox_pred.size(-2)
+    # best_iou_mask = best_iou_mask.int().argmax(-1)
+    # best_iou_mask = torch.eye(B, device=best_iou_mask.device)[best_iou_mask].bool()
     return best_iou_mask
 
 
@@ -213,11 +214,15 @@ def main():
     print("Passed yolo tensor split test")
 
     # bbox responsibility test (test in cxcywh format)
-    bbox_label = t([[0.0, 0.0, 1.0, 1.0]])
-    bbox_pred = t([[0.0, 0.0, 1.1, 1.1], [0.0, 0.0, 1.0, 1.0]])
-    best_iou_mask = get_best_iou(bbox_label, bbox_pred)
-    assert torch.all(best_iou_mask == t([False, True]))
-    print("Passed max iou mask test")
+    assert torch.all(
+        get_best_iou(t([[0, 0, 1, 1]]), t([[0, 0, 2, 2], [0, 0, 1, 1]]))
+        == t([False, True])
+    )
+    assert torch.all(
+        get_best_iou(t([[0, 0, 1, 1]]), t([[0, 0, 1, 1], [0, 0, 1, 1]]))
+        == t([True, True])
+    )
+    print("Passed best iou mask test")
 
 
 if __name__ == "__main__":

@@ -64,6 +64,11 @@ class DetectorTrainer:
             preds.cpu(), self.S, self.B, self.C
         )
 
+        # expand class_pred to handle multiple bbox with the same iou
+        # this can happen during very first training steps where all
+        # bboxes are 0
+        class_pred = class_pred.unsqueeze(-2).expand(-1, -1, -1, self.B, -1)
+
         # get best iou mask
         best_iou_mask = get_best_iou(bbox_label, bbox_pred)
         resp_mask = best_iou_mask * objectness_label
@@ -75,7 +80,7 @@ class DetectorTrainer:
             # mask preds
             bbox_pred_masked = bbox_pred[i][resp_mask[i]]
             objectness_pred_masked = objectness_pred[i][resp_mask[i]]
-            class_pred_masked = class_pred[i][objectness_label[i].squeeze(-1)].argmax(-1)  # fmt: skip
+            class_pred_masked = class_pred[i][resp_mask[i]].argmax(-1)
             # masks labels
             bbox_label_masked = bbox_label[i][objectness_label[i]]
             class_label_masked = class_label[i][objectness_label[i].squeeze(-1)].argmax(-1)  # fmt: skip
