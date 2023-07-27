@@ -70,7 +70,7 @@ def main():
     val_loader = val_dataset.create_dataloader(cfg.VAL_BS, False, cfg.N_WORKERS)
 
     # prepare training
-    model = YoloDetection(B=cfg.B, C=cfg.C)
+    model = YoloDetection(B=cfg.B, C=cfg.C, use_sigmoid=cfg.USE_SIGMOID)
     if cfg.BACKBONE_PATH is not None:
         model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))
     if cfg.FREEZE_BACKBONE:
@@ -161,8 +161,8 @@ def main():
         val_map_metric,
         val_loss_metric,
     )
-    # trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
-    trainer.overfit_one_batch(train_loader, scheduler_step=True)
+    trainer.fit(train_loader, val_loader, cfg.N_EPOCHS)
+    # trainer.overfit_one_batch(train_loader, scheduler_step=True)
 
     accelerator.end_training()  # for trackers finalization
 

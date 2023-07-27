@@ -26,9 +26,9 @@ def get_train_val_aug() -> tuple:
         [
             A.Resize(448, 448),
             A.HorizontalFlip(p=0.5),
-            # A.ColorJitter(p=0.5), # TODO
-            # A.ShiftScaleRotate(p=0.5),
-            # A.RandomBrightnessContrast(p=0.3),
+            A.ColorJitter(p=0.5),
+            A.ShiftScaleRotate(p=0.5),
+            A.RandomBrightnessContrast(p=0.3),
             A.Normalize(),
             ToTensorV2(),
         ],

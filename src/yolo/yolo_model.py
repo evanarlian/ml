@@ -122,11 +122,12 @@ class YoloPretraining(nn.Module):
 
 
 class YoloDetection(nn.Module):
-    def __init__(self, B: int, C: int):
+    def __init__(self, B: int, C: int, use_sigmoid=False):
         super().__init__()
         # source: see yolo paper on figure 3 (all, even with fc)
         self.B = B  # bboxes per grid
         self.C = C  # classes per grid
+        self.use_sigmoid = use_sigmoid
         self.n_items = B * 5 + C
         self.backbone = YoloBackbone()
         self.detector = nn.Sequential(
@@ -135,11 +136,13 @@ class YoloDetection(nn.Module):
             nn.Dropout(p=0.5),
             nn.Linear(4096, self.n_items),
         )
+        self.last_activation = nn.Sigmoid() if use_sigmoid else nn.Identity()
 
     def forward(self, x):
         x = self.backbone(x)
         x = x.permute(0, 2, 3, 1)
         x = self.detector(x)
+        x = self.last_activation(x)
         return x
 
     def debug_forward(self, x):
@@ -147,6 +150,7 @@ class YoloDetection(nn.Module):
         x = self.backbone(x); print("after backbone", x.size())
         x = x.permute(0, 2, 3, 1); print("after permute", x.size())
         x = self.detector(x); print("after detector", x.size())
+        x = self.last_activation(x); print("after last_activation", x.size())
         # fmt: off
         return x
 
