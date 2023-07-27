@@ -32,7 +32,10 @@ def get_train_val_aug() -> tuple:
             A.Normalize(),
             ToTensorV2(),
         ],
-        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_names"]),
+        bbox_params=A.BboxParams(
+            format="pascal_voc",
+            label_fields=["class_names", "is_difficult"],
+        ),
     )  # TODO see more BboxParams
     val_aug = A.Compose(
         [
@@ -40,7 +43,10 @@ def get_train_val_aug() -> tuple:
             A.Normalize(),
             ToTensorV2(),
         ],
-        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_names"]),
+        bbox_params=A.BboxParams(
+            format="pascal_voc",
+            label_fields=["class_names", "is_difficult"],
+        ),
     )  # TODO see more BboxParams
     return train_aug, val_aug
 
@@ -53,6 +59,7 @@ class PascalVoc(Dataset):
         class2id: dict,
         id2class: dict,
         aug: A.Compose,
+        include_difficult: bool,
         S: int,
         B: int,
         C: int,
@@ -62,6 +69,7 @@ class PascalVoc(Dataset):
         self.class2id = class2id
         self.id2class = id2class
         self.aug = aug
+        self.include_difficult = include_difficult
         self.S = S
         self.B = B
         self.C = C
@@ -103,9 +111,14 @@ class PascalVoc(Dataset):
             "height": int(root.find("size").find("height").text),
             "class_names": [],
             "bboxes": [],
+            "is_difficult": [],
         }
         for detection in root.findall("object"):
+            is_difficult = bool(int(detection.find("difficult").text))
+            if not self.include_difficult and is_difficult:
+                continue
             d["class_names"].append(detection.find("name").text)
+            d["is_difficult"].append(is_difficult)
             bbox = detection.find("bndbox")
             d["bboxes"].append(
                 (
@@ -130,6 +143,7 @@ class PascalVoc(Dataset):
         d["class_ids"] = [b["class_ids"] for b in batch]
         d["pascalvoc_bboxes"] = [b["pascalvoc_bboxes"] for b in batch]
         d["yolo_bboxes"] = [b["yolo_bboxes"] for b in batch]
+        d["is_difficult"] = [b["is_difficult"] for b in batch]
         return d
 
     def __getitem__(self, i):
@@ -146,6 +160,7 @@ class PascalVoc(Dataset):
             image=np.array(image_pil),
             bboxes=parsed["bboxes"],
             class_names=parsed["class_names"],
+            is_difficult=parsed["is_difficult"],
         )
         class_names = transformed["class_names"]
         class_ids = [self.class2id[c] for c in parsed["class_names"]]
@@ -154,6 +169,7 @@ class PascalVoc(Dataset):
             self._pascalvoc_to_yolo_format(bbox, (448, 448))
             for bbox in pascalvoc_bboxes
         ]
+        is_difficult = transformed["is_difficult"]
         # construct separate tensors for class, objectness, and bbox label
         # there are extra dimension with length 1 to enable easy broadcasting
         # bbox label: (S x S x 1 x 4), just need 1 bbox because of 1 bbox per grid
@@ -184,6 +200,7 @@ class PascalVoc(Dataset):
             "class_ids": class_ids,
             "pascalvoc_bboxes": pascalvoc_bboxes,
             "yolo_bboxes": yolo_bboxes,
+            "is_difficult": is_difficult,
         }
         return d
 
@@ -199,7 +216,13 @@ class PascalVoc(Dataset):
         )
 
 
-def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
+def build_pascalvoc(
+    pascalvoc_dir: Path | str,
+    include_difficult=False,
+    S=7,
+    B=2,
+    C=20,
+):
     pascalvoc_dir = Path(pascalvoc_dir)
     annot_dir = Path(pascalvoc_dir / "Annotations")
     image_dir = Path(pascalvoc_dir / "JPEGImages")
@@ -210,10 +233,26 @@ def build_pascalvoc(pascalvoc_dir: Path | str, S=7, B=2, C=20):
     )
     train_aug, val_aug = get_train_val_aug()
     train_ds = PascalVoc(
-        train_annots, image_dir, class2id, id2class, train_aug, S=S, B=B, C=C
+        train_annots,
+        image_dir,
+        class2id,
+        id2class,
+        train_aug,
+        include_difficult=include_difficult,
+        S=S,
+        B=B,
+        C=C,
     )
     val_ds = PascalVoc(
-        val_annots, image_dir, class2id, id2class, val_aug, S=S, B=B, C=C
+        val_annots,
+        image_dir,
+        class2id,
+        id2class,
+        val_aug,
+        include_difficult=include_difficult,
+        S=S,
+        B=B,
+        C=C,
     )
     return train_ds, val_ds, class2id, id2class
 
@@ -224,7 +263,7 @@ def main():
     print(val_dataset)
     print(class2id)
     print(id2class)
-
+    print(train_dataset[0].keys())
 
 if __name__ == "__main__":
     main()
