@@ -48,13 +48,17 @@ def download_imagenet(root_dir: Path, min_size: int):
     val_dir = root_dir / "val"
     test_dir = root_dir / "test"
 
+    print("Downloading train split")
     save_single_dataset(train_dir, train_ds, min_size)
+    print("Downloading val split")
     save_single_dataset(val_dir, val_ds, min_size)
+    print("Downloading test split")
     save_single_dataset(test_dir, test_ds, min_size)
 
 
 def main(args):
-    root_dir = Path("data/imagenet/")
+    root_dir = Path("data") / f"imagenet_1k_resized_{args.min_size}"
+    print(f"Saving dataset to {root_dir}, this will be very slow")
     make_directories(root_dir)
     download_imagenet(root_dir, min_size=args.min_size)
 
