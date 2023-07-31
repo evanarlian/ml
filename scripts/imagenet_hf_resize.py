@@ -42,9 +42,9 @@ def save_single_dataset(split_dir: Path, dataset: Dataset, min_size: int):
         im.save(split_dir / label / filename)
 
 
-def download_imagenet(root_dir: Path, min_size: int):
+def download_imagenet(root_dir: Path, min_size: int, streaming: bool):
     # do not decode because we need the real filename
-    ds = load_dataset("imagenet-1k", streaming=True).cast_column(
+    ds = load_dataset("imagenet-1k", streaming=streaming).cast_column(
         "image", HFImage(decode=False)
     )
     train_ds = ds["train"]
@@ -65,16 +65,20 @@ def download_imagenet(root_dir: Path, min_size: int):
 
 def main(args):
     root_dir = Path("data") / f"imagenet_1k_resized_{args.min_size}"
-    print(f"Saving dataset to {root_dir}, this will be very slow")
+    print(f"Saving dataset to {root_dir}, will take quite some time")
+    print("Use streaming mode?", args.streaming)
     make_directories(root_dir)
-    download_imagenet(root_dir, min_size=args.min_size)
+    download_imagenet(root_dir, min_size=args.min_size, streaming=args.streaming)
 
 
 if __name__ == "__main__":
     # NOTE you must accept to imagenet's permission to be able to access
-    # the resize default is 256 because most common computer vision workflow is to
-    # resize to 256, and then random crop to 224
     parser = ArgumentParser()
     parser.add_argument("--min_size", type=int, default=256, help="Resize min size to")
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Streaming will not download the whole dataset",
+    )
     args = parser.parse_args()
     main(args)
