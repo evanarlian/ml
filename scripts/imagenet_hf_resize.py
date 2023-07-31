@@ -27,8 +27,15 @@ def save_single_dataset(split_dir: Path, dataset: Dataset, min_size: int):
     for batch in tqdm(dataset):
         bio = BytesIO(batch["image"]["bytes"])
         im = Image.open(bio).convert("RGB")
-        # thumbnail preserve aspect ratio and it is inplace
-        im.thumbnail((min_size, min_size))
+        # resize smaller side to min_size
+        w, h = im.size
+        if w < h:
+            new_w = min_size
+            new_h = int(min_size * h / w)
+        else:
+            new_h = min_size
+            new_w = int(min_size * w / h)
+        im = im.resize((new_w, new_h))
         # real filename might not be .JPEG, better force them
         filename = batch["image"]["path"].split(".")[0] + ".JPEG"
         label = "_1" if batch["label"] == -1 else f"{batch['label']:03d}"
