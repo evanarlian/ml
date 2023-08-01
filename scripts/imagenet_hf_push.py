@@ -7,9 +7,7 @@ from datasets import load_dataset
 
 def main(root_dir: Path, username: str):
     # load real imagenet for reference
-    imagenet_labels = load_dataset(
-        "imagenet-1k", split="validation", streaming=True
-    ).features["label"]
+    imagenet_labels = load_dataset("imagenet-1k", split="validation").features["label"]
 
     # need to use data_files since data_dir will cause duplicate filenames
     # (only on special case, in this case: duplicate in validation only)
@@ -42,10 +40,10 @@ if __name__ == "__main__":
         "--folder",
         type=Path,
         default="data/imagenet_1k_resized_256",
-        help="Imagenet folder to upload to HF hub.",
+        help="Imagenet folder to upload to HF hub",
     )
     parser.add_argument(
-        "--username", type=str, default="evanarlian", help="HF username."
+        "--username", type=str, default="evanarlian", help="HF username"
     )
     args = parser.parse_args()
     if not args.folder.exists():
