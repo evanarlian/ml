@@ -29,7 +29,11 @@ def main(root_dir: Path, username: str):
     ds["test"] = ds["test"].cast_column("label", imagenet_labels)
 
     # force set test label to -1
-    ds["test"] = ds["test"].map(lambda row: row | {"label": -1})
+    def to_neg_one(row):
+        row["label"] = -1
+        return row
+
+    ds["test"] = ds["test"].map(to_neg_one)
 
     ds.push_to_hub(f"{username}/{root_dir.name}")
 
