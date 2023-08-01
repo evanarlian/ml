@@ -2,7 +2,8 @@ from pathlib import Path
 
 import torch
 from alexnet import AlexNet as MyAlexNet
-from dataset import ImageNetMini, get_dataset_mean, make_train_aug, make_val_aug
+from dataset import ImageNet, make_train_aug, make_val_aug
+from datasets import load_dataset
 from torch import Tensor, nn, optim
 from tqdm.auto import tqdm
 
@@ -24,14 +25,11 @@ def main():
     N_EPOCHS = 90
 
     # get dataset
-    train_dataset_mean = get_dataset_mean(
-        root_folder="data/imagenet-mini/train/",
-        cache_file="src/alexnet/train_img_mean.pt",
-    )
-    train_aug = make_train_aug(train_dataset_mean)
-    val_aug = make_val_aug(train_dataset_mean)  # use train's too to prevent data leak
-    train_ds = ImageNetMini("data/imagenet-mini/train/", train_aug)
-    val_ds = ImageNetMini("data/imagenet-mini/val/", val_aug)
+    ds = load_dataset("evanarlian/imagenet_1k_resized_256")
+    train_aug = make_train_aug()
+    val_aug = make_val_aug()  # use train's too to prevent data leak
+    train_ds = ImageNet(ds["train"], train_aug)
+    val_ds = ImageNet(ds["val"], val_aug)
 
     # load models
     my_alexnet = MyAlexNet()
@@ -44,7 +42,7 @@ def main():
     loss_fn = nn.CrossEntropyLoss()
     opt = optim.SGD(my_alexnet.parameters(), LR, MOMENTUM, weight_decay=WEIGHT_DECAY)
     sched = optim.lr_scheduler.ReduceLROnPlateau(
-        opt, mode="min", factor=0.1, patience=30
+        opt, mode="min", factor=0.1, patience=10
     )
     train_loader = train_ds.create_dataloader(BATCH_SIZE, 4, shuffle=True)
     val_loader = val_ds.create_dataloader(BATCH_SIZE, 4, shuffle=False)

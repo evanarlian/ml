@@ -42,6 +42,11 @@ step 1                      step 2
 ## Local Response Normalization (LRM)
 Inspired by real biological neuron, which is called [lateral inhibition](https://en.wikipedia.org/wiki/Lateral_inhibition). LRN works by supressing neighbouring weak neuron output around the strong neuron output so that the strong one stands out more.
 
+# Usage
+```bash
+python src/alexnet/train.py
+```
+
 # Implementation details
 * In train data augmentation, the correct augmentation to choose is [TenCrop](https://pytorch.org/vision/stable/generated/torchvision.transforms.TenCrop.html#torchvision.transforms.TenCrop), but I decided to use RandomCrop because TenCrop messes with batchsize due to returning as a tuple.
 * Model architecture is quite different from PyTorch implementation (num conv channels), but should be close to the paper.
