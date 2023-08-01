@@ -1,5 +1,7 @@
 from argparse import ArgumentParser
 from io import BytesIO
+from itertools import accumulate
+from multiprocessing import Process
 from pathlib import Path
 
 from datasets import Dataset, load_dataset
@@ -23,8 +25,18 @@ def make_directories(root_dir: Path):
     (test_dir / "_1").mkdir(exist_ok=True)  # placeholder for no label
 
 
-def save_single_dataset(split_dir: Path, dataset: Dataset, min_size: int):
-    for batch in tqdm(dataset):
+def hehe(
+    dataset: Dataset,
+    start_idx: int,
+    end_idx: int,
+    min_size: int,
+    split_dir: Path,
+    proc_id: int,
+):
+    for i in tqdm(
+        range(start_idx, end_idx), position=proc_id, desc=f"{split_dir.name}:{proc_id}"
+    ):
+        batch = dataset[i]
         bio = BytesIO(batch["image"]["bytes"])
         im = Image.open(bio).convert("RGB")
         # resize smaller side to min_size
@@ -42,43 +54,65 @@ def save_single_dataset(split_dir: Path, dataset: Dataset, min_size: int):
         im.save(split_dir / label / filename)
 
 
-def download_imagenet(root_dir: Path, min_size: int, streaming: bool):
+def get_ranges(n: int, n_splits: int):
+    part = n // n_splits
+    temp = [part + (i < n % n_splits) for i in range(n_splits)]
+    cumsum = [0] + list(accumulate(temp))
+    return list(zip(cumsum[:-1], cumsum[1:]))
+
+
+def download_imagenet(root_dir: Path, min_size: int, n_proc: int):
     # do not decode because we need the real filename
-    ds = load_dataset("imagenet-1k", streaming=streaming).cast_column(
-        "image", HFImage(decode=False)
-    )
-    train_ds = ds["train"]
-    val_ds = ds["validation"]
-    test_ds = ds["test"]
+    ds = load_dataset("imagenet-1k").cast_column("image", HFImage(decode=False))
 
-    train_dir = root_dir / "train"
-    val_dir = root_dir / "val"
-    test_dir = root_dir / "test"
+    # save train
+    train_processes = []
+    for i, (start_idx, end_idx) in enumerate(get_ranges(len(ds["train"]), n_proc)):
+        p = Process(
+            target=hehe,
+            args=(ds["train"], start_idx, end_idx, min_size, root_dir / "train", i),
+        )
+        train_processes.append(p)
+        p.start()
+    for p in train_processes:
+        p.join()
 
-    print("Downloading train split")
-    save_single_dataset(train_dir, train_ds, min_size)
-    print("Downloading val split")
-    save_single_dataset(val_dir, val_ds, min_size)
-    print("Downloading test split")
-    save_single_dataset(test_dir, test_ds, min_size)
+    # save val
+    val_processes = []
+    for i, (start_idx, end_idx) in enumerate(get_ranges(len(ds["val"]), n_proc)):
+        p = Process(
+            target=hehe,
+            args=(ds["val"], start_idx, end_idx, min_size, root_dir / "val", i),
+        )
+        val_processes.append(p)
+        p.start()
+    for p in val_processes:
+        p.join()
+
+    # save test
+    test_processes = []
+    for i, (start_idx, end_idx) in enumerate(get_ranges(len(ds["test"]), n_proc)):
+        p = Process(
+            target=hehe,
+            args=(ds["test"], start_idx, end_idx, min_size, root_dir / "test", i),
+        )
+        test_processes.append(p)
+        p.start()
+    for p in test_processes:
+        p.join()
 
 
 def main(args):
     root_dir = Path("data") / f"imagenet_1k_resized_{args.min_size}"
-    print(f"Saving dataset to {root_dir}, will take quite some time")
-    print("Use streaming mode?", args.streaming)
+    print(f"Saving dataset to {root_dir}, using {args.n_proc} processes")
     make_directories(root_dir)
-    download_imagenet(root_dir, min_size=args.min_size, streaming=args.streaming)
+    download_imagenet(root_dir, min_size=args.min_size, n_proc=args.n_proc)
 
 
 if __name__ == "__main__":
     # NOTE you must accept to imagenet's permission to be able to access
     parser = ArgumentParser()
     parser.add_argument("--min_size", type=int, default=256, help="Resize min size to")
-    parser.add_argument(
-        "--streaming",
-        action="store_true",
-        help="Streaming will not download the whole dataset",
-    )
+    parser.add_argument("--n_proc", type=int, default=4, help="Num proc for processing")
     args = parser.parse_args()
     main(args)
