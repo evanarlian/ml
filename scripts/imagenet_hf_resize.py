@@ -79,10 +79,10 @@ def download_imagenet(root_dir: Path, min_size: int, n_proc: int):
 
     # save val
     val_processes = []
-    for i, (start_idx, end_idx) in enumerate(get_ranges(len(ds["val"]), n_proc)):
+    for i, (start_idx, end_idx) in enumerate(get_ranges(len(ds["validation"]), n_proc)):
         p = Process(
             target=hehe,
-            args=(ds["val"], start_idx, end_idx, min_size, root_dir / "val", i),
+            args=(ds["validation"], start_idx, end_idx, min_size, root_dir / "val", i),
         )
         val_processes.append(p)
         p.start()
