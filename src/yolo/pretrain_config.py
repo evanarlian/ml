@@ -2,7 +2,7 @@ SEED = 42
 TRAIN_BS = 64
 VAL_BS = 64
 N_WORKERS = 8
-N_CLASSES = 100  # 100 because of imagenet100
+N_CLASSES = 1000
 
 N_EPOCHS = 80
 MAX_LR = 0.01
