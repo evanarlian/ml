@@ -37,7 +37,7 @@ Extract just the backbone from pretrained model (essentially removing the classi
 python src/yolo/extract_backbone.py <pretrained_path> <output_backbone_path>
 
 # example (using default value for output backbone path)
-python src/yolo/extract_backbone.py src/yolo/accelerate_logs/exp_2023-07-25_17-55-26/checkpoints/checkpoint_33/pytorch_model.bin
+python src/yolo/extract_backbone.py src/yolo/accelerate_logs/exp_2023-08-02_17-49-37/checkpoints/checkpoint_27/pytorch_model.bin
 ```
 Modify `detection_config.py` and train object detector on Pascal VOC.
 ```bash
@@ -46,11 +46,11 @@ accelerate launch src/yolo/detection_train.py
 
 # Results
 ## Pretraining
-This classifier is pretrained on ImageNet100 (not 1000 because of resources limitations), and the dog is not one of the classes. See on [wandb](https://wandb.ai/evanarlian/yolo_pretraining) for full metrics.
+The model is trained on ImageNet only for 42 epochs. See on [wandb](https://wandb.ai/evanarlian/yolo_pretraining) for full metrics.
 <div style="display: flex; flex-wrap: wrap;">
-    <img src="demo/imagenet_spider.png" style="width: 33%;">
-    <img src="demo/imagenet_dog.png" style="width: 33%;">
-    <img src="demo/imagenet_flamingo.png" style="width: 33%;">
+    <img src="demo/spider.png" style="width: 33%;">
+    <img src="demo/golden.png" style="width: 33%;">
+    <img src="demo/flamingo.png" style="width: 33%;">
 </div>
 
 ## Detection
@@ -61,16 +61,15 @@ TODO
 * find bottleneck in training
 
 # TODO now
-* best course of action:
-    * freeze for 1 epoch, check result (DOING)
-    * train on fully untrained model
-    * revert the eye code and prevent inf/nan with clamp or whatever
-    * see others impl
-* infinity problem is not solved by using 1 boolean force, 
-* boolean forcing may create a dumb network, since latter B is not trained
-* wandb log image
+* train on real imagenet, maybe from vast.ai, tensordock, lambdalabs
+* learn putting weights on the internet and local files? learn to use callbacks or some sort
+* damn lightning seem to be so good when handling this mess (logging etc)
+* 
+* best course of action: see others impl
 * check on model reshaping (i initially only use 30 <=> 20 on linear layer), maybe check on official wongkinyiu + ultralytics
-* try torchmetric's mAP first, torchmetrics map on a batch??
+* use different backbone (IMAGENET pretrained backbone)
+* check on the 
+* wandb log image
 
 
 # Questions
