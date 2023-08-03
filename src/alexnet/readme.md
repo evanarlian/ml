@@ -47,9 +47,15 @@ Inspired by real biological neuron, which is called [lateral inhibition](https:/
 python src/alexnet/train.py
 ```
 
+# Results
+The model is not confident enough (low percentage), but still manages to be correct most of the time.
+![](demo/gsd.png)
+
+
 # Implementation details
 * In train data augmentation, the correct augmentation to choose is [TenCrop](https://pytorch.org/vision/stable/generated/torchvision.transforms.TenCrop.html#torchvision.transforms.TenCrop), but I decided to use RandomCrop because TenCrop messes with batchsize due to returning as a tuple.
 * Model architecture is quite different from PyTorch implementation (num conv channels), but should be close to the paper.
+* Model is not trained fully on 90 epochs.
 
 # References
 * [ImageNet Classification with Deep Convolutional Neural Networks](https://proceedings.neurips.cc/paper_files/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf)

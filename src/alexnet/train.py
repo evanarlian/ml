@@ -16,12 +16,18 @@ def calc_topk_acc(y_true: Tensor, logits: Tensor, k: int) -> float:
 def save_best(model: nn.Module, epoch: int, loss: float, save_folder: Path):
     for file in save_folder.glob("alexnet_best_*.pt"):
         file.unlink()
-    torch.save(
-        model.state_dict(), save_folder / f"alexnet_best_ep{epoch}_loss{loss:.3f}.pt"
-    )
+    # detect for compiled model, we want for the final model
+    # to be able to be loaded from the checkpoint cleanly
+    if hasattr(model, "_orig_mod"):
+        state_dict = model._orig_mod.state_dict()
+    else:
+        state_dict = model.state_dict()
+    torch.save(state_dict, save_folder / f"alexnet_best_ep{epoch}_loss{loss:.3f}.pt")
 
 
 def main():
+    torch.backends.cudnn.benchmark = True
+    torch.set_float32_matmul_precision("high")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     save_folder = Path("src/alexnet/ckpt/")
     save_folder.mkdir(parents=True, exist_ok=True)
@@ -32,13 +38,9 @@ def main():
     LR = 0.01
     MOMENTUM = 0.9
     N_EPOCHS = 90
-    LOAD_FROM_BEST = True  # continue train
 
     # get dataset
-    ds = load_dataset(
-        "evanarlian/imagenet_1k_resized_256",
-        revision="57f3f7e513fbd380a5053b4da4baa9825afe695a",
-    )
+    ds = load_dataset("evanarlian/imagenet_1k_resized_256")
     train_aug = make_train_aug()
     val_aug = make_val_aug()  # use train's too to prevent data leak
     train_ds = ImageNet(ds["train"], train_aug)
@@ -46,22 +48,12 @@ def main():
 
     # load models
     my_alexnet = MyAlexNet()
-    if LOAD_FROM_BEST:
-        best_list = list(save_folder.glob("alexnet_best_*.pt"))
-        if len(best_list) == 0:
-            print("No best checkpoint found, training from scratch")
-        else:
-            print(f"Continue training from {best_list[0]}")
-            my_alexnet.load_state_dict(torch.load(best_list[0]))
-    else:
-        print("Training from scratch, might override older checkpoints")
-
-    # train model
-    my_alexnet.to(device)
+    my_alexnet = torch.compile(my_alexnet)
+    my_alexnet = my_alexnet.to(device)
     loss_fn = nn.CrossEntropyLoss()
     opt = optim.SGD(my_alexnet.parameters(), LR, MOMENTUM, weight_decay=WEIGHT_DECAY)
     sched = optim.lr_scheduler.ReduceLROnPlateau(
-        opt, mode="min", factor=0.1, patience=10, verbose=True
+        opt, mode="min", factor=0.1, patience=5, verbose=True
     )
     train_loader = train_ds.create_dataloader(BATCH_SIZE, 4, shuffle=True)
     val_loader = val_ds.create_dataloader(BATCH_SIZE, 4, shuffle=False)
@@ -69,6 +61,7 @@ def main():
     val_loss_counter = []
     best_loss = float("inf")
 
+    # train model
     for epoch in range(1, N_EPOCHS + 1):
         # train
         my_alexnet.train()
@@ -109,10 +102,9 @@ def main():
 
         # save
         if curr_losses < best_loss:
-            print(f"Found lower loss {curr_losses}")
+            print(f" > Found lower loss {curr_losses}")
             best_loss = curr_losses
             save_best(my_alexnet, epoch, curr_losses, save_folder)
-        torch.save(my_alexnet.state_dict(), save_folder / "alexnet_latest.pt")
 
         # logging
         print(
