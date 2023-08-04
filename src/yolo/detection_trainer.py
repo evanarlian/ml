@@ -171,13 +171,15 @@ class DetectorTrainer:
                 print(f"🍀 Found new best loss: {avg_val_loss}")
                 self.best_loss = avg_val_loss
                 self.accelerator.save(
-                    self.model, Path(self.accelerator.project_dir) / "best_loss.pt"
+                    self.model.state_dict(),
+                    Path(self.accelerator.project_dir) / "best_loss.pt",
                 )
             if val_map > self.best_map:
                 print(f"🍀 Found new best map: {val_map}")
                 self.best_map = val_map
                 self.accelerator.save(
-                    self.model, Path(self.accelerator.project_dir) / "best_map.pt"
+                    self.model.state_dict(),
+                    Path(self.accelerator.project_dir) / "best_map.pt",
                 )
             self.accelerator.save_state()
             self.accelerator.log({"train/epoch": epoch}, step=self.global_step)

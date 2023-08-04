@@ -1,8 +1,53 @@
 import random
 from collections import OrderedDict
 
+import matplotlib as mpl
 import torch
+from matplotlib.colors import Normalize
 from torch import Tensor
+
+
+class Color:
+    def __init__(self, n_classes: int, cmap: str = None):
+        """
+        Create random color according to given number.
+
+        Args:
+            n_classes (int): Number of classes in your data.
+            cmap (str, optional): Matplotlib's cm. Defaults to rainbow.
+                See more here: https://matplotlib.org/stable/tutorials/colors/colormaps.html
+        """
+        self.n_classes = n_classes
+        self.cmap = cmap or "rainbow"
+        self._cmap = mpl.colormaps[self.cmap]
+        self.norm = Normalize(vmin=0, vmax=n_classes - 1)
+
+    def get(self, label: int) -> tuple:
+        if not 0 <= label < self.n_classes:
+            raise ValueError(f"Label should be 0, ..., {self.n_classes-1}")
+        rgba = self._cmap(self.norm(label))
+        rgb = tuple(int(c * 255) for c in rgba[:-1])
+        return rgb
+
+
+def resize_min_side(w: int, h: int, min_size: int) -> tuple[int, int]:
+    """
+    Resize w and h in such a way that the smaller side will be `min_size`.
+
+    Args:
+        w (int): image width
+        h (int): image height
+        min_size (int): desired min side length
+
+    Returns:
+        tuple[int, int]: new calculated w and h
+    """
+    smaller_side = min(w, h)
+    shrinkage_ratio = min_size / smaller_side
+    # must shrink the same amount to maintain aspect ratio
+    new_w = int(w * shrinkage_ratio)
+    new_h = int(h * shrinkage_ratio)
+    return new_w, new_h
 
 
 def convert_yolo_to_pascalvoc(bboxes: Tensor) -> Tensor:
@@ -223,6 +268,12 @@ def main():
         == t([True, True])
     )
     print("Passed best iou mask test")
+
+    # color test
+    print("Color test:")
+    color_tool = Color(5)
+    for i in range(5):
+        print(color_tool.get(i))
 
 
 if __name__ == "__main__":

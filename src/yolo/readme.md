@@ -46,7 +46,7 @@ accelerate launch src/yolo/detection_train.py
 
 # Results
 ## Pretraining
-The model is trained on ImageNet only for 42 epochs. See on [wandb](https://wandb.ai/evanarlian/yolo_pretraining) for full metrics.
+The model is trained on ImageNet only for 42 epochs. On validation, the model performed 67% and 87% on top1 and top5 acc, repectively. See on [wandb](https://wandb.ai/evanarlian/yolo_pretraining) for full metrics.
 <div style="display: flex; flex-wrap: wrap;">
     <img src="demo/spider.png" style="width: 33%;">
     <img src="demo/golden.png" style="width: 33%;">
@@ -54,26 +54,16 @@ The model is trained on ImageNet only for 42 epochs. See on [wandb](https://wand
 </div>
 
 ## Detection
-TODO
+The model is using above pretrained backbone, and further finetuned on Pascal VOC for 135 epochs. On validation, the model performed at about 0.39 mAP@50. See on [wandb](https://wandb.ai/evanarlian/yolo_detection) for full metrics.
+![](demo/og_yolo_dog.png)
+![](demo/long_cow.png)
+![](demo/dining.png)
+![](demo/stunt.png)
 
-# TODO
-* check if huggingface datasets can speed up image data (just like audio mmap)
-* find bottleneck in training
-
-# TODO now
-* train on real imagenet, maybe from vast.ai, tensordock, lambdalabs
-* learn putting weights on the internet and local files? learn to use callbacks or some sort
-* damn lightning seem to be so good when handling this mess (logging etc)
-* 
-* best course of action: see others impl
-* check on model reshaping (i initially only use 30 <=> 20 on linear layer), maybe check on official wongkinyiu + ultralytics
-* use different backbone (IMAGENET pretrained backbone)
-* check on the 
-* wandb log image
-
-
-# Questions
-* How to supply S (yolo image grid) to model construction? 7 is obtained by the result of previous layers, so not from S.
+# Implementation details
+* 7 is obtained by the result of previous layers, so not from `S`. How to supply S (yolo image grid) to model construction? Currently the YoloDetection class only accepts `B` and `C`.
+* Detection head uses sigmoid (the paper uses identity/linear activation). After a lot of trial, without sigmoid the gradient will explode.
+* The learning rate used is much lower than the paper, about 7 times lower, or otherwise the gradient will explode too.
 
 # References
 * [YOLO paper](https://arxiv.org/abs/1506.02640)

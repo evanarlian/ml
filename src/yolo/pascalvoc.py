@@ -21,7 +21,7 @@ def get_pascal_voc_mapping(annotations_dir: Path) -> tuple[dict, dict]:
     return class2id, id2class
 
 
-def get_train_val_aug() -> tuple:
+def get_train_val_test_aug() -> tuple:
     train_aug = A.Compose(
         [
             A.Resize(448, 448),
@@ -36,7 +36,7 @@ def get_train_val_aug() -> tuple:
             format="pascal_voc",
             label_fields=["class_names", "is_difficult"],
         ),
-    )  # TODO see more BboxParams
+    )
     val_aug = A.Compose(
         [
             A.Resize(448, 448),
@@ -47,8 +47,16 @@ def get_train_val_aug() -> tuple:
             format="pascal_voc",
             label_fields=["class_names", "is_difficult"],
         ),
-    )  # TODO see more BboxParams
-    return train_aug, val_aug
+    )
+    # test_aug is the same as val_aug, but no bbox settings
+    test_aug = A.Compose(
+        [
+            A.Resize(448, 448),
+            A.Normalize(),
+            ToTensorV2(),
+        ]
+    )
+    return train_aug, val_aug, test_aug
 
 
 class PascalVoc(Dataset):
@@ -231,7 +239,7 @@ def build_pascalvoc(
     train_annots, val_annots = train_test_split(
         annot_paths, test_size=0.3, shuffle=False
     )
-    train_aug, val_aug = get_train_val_aug()
+    train_aug, val_aug, _ = get_train_val_test_aug()
     train_ds = PascalVoc(
         train_annots,
         image_dir,
