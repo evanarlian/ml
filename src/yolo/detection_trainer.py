@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 from accelerate import Accelerator
 from torch import Tensor, nn, optim
@@ -42,6 +44,7 @@ class DetectorTrainer:
         self.val_loss_metric = val_loss_metric
         self.global_step = 0
         self.best_loss = float("inf")
+        self.best_map = -1.0
 
     def calculate_map(self, batch: dict, preds: Tensor, metric: Metric) -> dict:
         # NOTE map per class is broken in torchmetrics since it does not accept
@@ -136,13 +139,12 @@ class DetectorTrainer:
                     self.calculate_map(batch, preds, self.train_map_metric),
                     step=self.global_step,
                 )
-                # TODO log images?
         if not self.accelerator.step_scheduler_with_optimizer:
             self.scheduler.step()
         self.train_map_metric.reset()
 
     @torch.no_grad()
-    def val(self, val_loader: DataLoader) -> float:
+    def val(self, val_loader: DataLoader) -> tuple[float, float]:
         self.model.eval()
         for batch in (pbar := tqdm(val_loader, desc="val", leave=False)):
             loss, preds = self.single_step(batch)
@@ -155,20 +157,29 @@ class DetectorTrainer:
         avg_loss = self.val_loss_metric.compute()
         self.accelerator.log({"val/loss": avg_loss}, step=self.global_step)
         self.val_loss_metric.reset()
-        self.accelerator.log(self.val_map_metric.compute(), step=self.global_step)
+        maps = self.val_map_metric.compute()
+        self.accelerator.log(maps, step=self.global_step)
         self.val_map_metric.reset()
-        # TODO log images
-        return avg_loss
+        return avg_loss, maps["val/map"]
 
     def fit(self, train_loader: DataLoader, val_loader: DataLoader, n_epochs: int):
         for epoch in range(1, n_epochs + 1):
             print(f"epoch {epoch}/{n_epochs}")
             self.train(train_loader)
-            avg_val_loss = self.val(val_loader)
+            avg_val_loss, val_map = self.val(val_loader)
             if avg_val_loss < self.best_loss:
-                print(f"Found new best loss: {avg_val_loss}")
+                print(f"🍀 Found new best loss: {avg_val_loss}")
                 self.best_loss = avg_val_loss
-                self.accelerator.save_state()
+                self.accelerator.save(
+                    self.model, Path(self.accelerator.project_dir) / "best_loss.pt"
+                )
+            if val_map > self.best_map:
+                print(f"🍀 Found new best map: {val_map}")
+                self.best_map = val_map
+                self.accelerator.save(
+                    self.model, Path(self.accelerator.project_dir) / "best_map.pt"
+                )
+            self.accelerator.save_state()
             self.accelerator.log({"train/epoch": epoch}, step=self.global_step)
 
     def overfit_one_batch(self, train_loader: DataLoader, scheduler_step: bool):

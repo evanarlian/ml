@@ -32,7 +32,7 @@ def setup_accelerate(project_root: Path, project_name: str, hparams: dict):
         project_config=ProjectConfiguration(
             project_dir=accelerate_logs_dir / f"exp_{now}",
             automatic_checkpoint_naming=True,
-            total_limit=1,  # this is a hack for storing the best model
+            total_limit=1,  # this is for storing the latest state
         ),
         step_scheduler_with_optimizer=cfg.STEP_SCHED_WITH_OPT,
     )
@@ -49,7 +49,18 @@ def setup_accelerate(project_root: Path, project_name: str, hparams: dict):
             }
         },
     )
+    Path(accelerator.project_dir).mkdir(parents=True)
     return accelerator
+
+
+def freeze_backbone_groups(model: YoloDetection, until: int):
+    # group 1-6, so i starts at 1
+    for i, (name, child) in enumerate(model.backbone.named_children(), 1):
+        if i <= until:
+            child.requires_grad_(False)
+            print(f"🧊 Freezing {name}")
+        else:
+            print(f"_ Skip freezing {name}")
 
 
 def main():
@@ -73,8 +84,7 @@ def main():
     model = YoloDetection(B=cfg.B, C=cfg.C, use_sigmoid=cfg.USE_SIGMOID)
     if cfg.BACKBONE_PATH is not None:
         model.backbone.load_state_dict(torch.load(cfg.BACKBONE_PATH))
-    if cfg.FREEZE_BACKBONE:
-        model.backbone.requires_grad_(False)
+    freeze_backbone_groups(model, cfg.FREEZE_BACKBONE_UNTIL)
     criterion = YoloLoss(S=cfg.S, B=cfg.B, C=cfg.C)
 
     # optimizer

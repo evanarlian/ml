@@ -1,5 +1,5 @@
 BACKBONE_PATH = "src/yolo/backbone.pt"
-FREEZE_BACKBONE = False
+FREEZE_BACKBONE_UNTIL = 0  # freeze group 1-6 in backbone
 S = 7  # S x S grid
 B = 2  # bbox per grid
 C = 20  # num classes, 20 is from pascalvoc
@@ -21,7 +21,7 @@ OPTIMIZER = "sgd"  # "sgd", "adamw"
 SGD_MOMENTUM = 0.9
 SGD_NESTEROV = True
 SCHEDULER = "yolo"  # "onecycle", "yolo", None
-YOLO_SCHED_DIVIDER = 5.0  # HACK for preventing gradient exploding
+YOLO_SCHED_DIVIDER = 7.0  # HACK for preventing gradient exploding
 STEP_SCHED_WITH_OPT = SCHEDULER in ("onecycle", "yolo")
 
 hparams = {k.lower(): v for k, v in locals().items() if not k.startswith("__")}
