@@ -14,14 +14,13 @@
 * Summary, for a single image, the prediction will be S x S x (B * 5 + C)
 
 # Usage
-Download 2 datasets required for this experiment.
+Download 2 datasets required for this experiment. Custom ImageNet dataset will be automatically downloaded using Hugging Face dataset.
 ```bash
-./scripts/download_imagenet_100.bash
 ./scripts/download_pascal_voc_2012.bash
 ```
 Sanity checks.
 ```bash
-python src/yolo/imagenet100.py
+python src/yolo/imagenet.py
 python src/yolo/pascalvoc.py
 python src/yolo/utils.py
 python src/yolo/yolo_model.py
@@ -69,6 +68,7 @@ $$S * S * B = 7 * 7 * 2 = 98$$
 * 7 is obtained by the result of previous layers, so not from `S`. How to supply S (yolo image grid) to model construction? Currently the YoloDetection class only accepts `B` and `C`.
 * Detection head uses sigmoid (the paper uses identity/linear activation). After a lot of trial, without sigmoid the gradient will explode.
 * The learning rate used is much lower than the paper, about 7 times lower, or otherwise the gradient will explode too.
+* Note: I originally trained the backbone on ImageNet100, and the result is so much better when the backbone is trained on real ImageNet. Turns out pretraining matters a lot.
 
 # References
 * [YOLO paper](https://arxiv.org/abs/1506.02640)
