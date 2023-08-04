@@ -60,6 +60,11 @@ The model is using above pretrained backbone, and further finetuned on Pascal VO
 ![](demo/dining.png)
 ![](demo/stunt.png)
 
+## Extras
+Just for fun, this is what happened if we turned the confidence threshold to 0.0 and nms threshold to 1.0. We can see every bbox predicted with yolo before any postprocessing.
+$$S * S * B = 7 * 7 * 2 = 98$$
+![](demo/all_yolo_boxes.png)
+
 # Implementation details
 * 7 is obtained by the result of previous layers, so not from `S`. How to supply S (yolo image grid) to model construction? Currently the YoloDetection class only accepts `B` and `C`.
 * Detection head uses sigmoid (the paper uses identity/linear activation). After a lot of trial, without sigmoid the gradient will explode.
