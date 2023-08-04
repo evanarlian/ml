@@ -62,6 +62,7 @@ The model is using above pretrained backbone, and further finetuned on Pascal VO
 ## Extras
 Just for fun, this is what happened if we turned the confidence threshold to 0.0 and nms threshold to 1.0. We can see every bbox predicted with yolo before any postprocessing.
 $$S * S * B = 7 * 7 * 2 = 98$$
+
 ![](demo/all_yolo_boxes.png)
 
 # Implementation details
