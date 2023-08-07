@@ -1,8 +1,9 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-import pretrain_config as cfg
 import torch
+
+import pretrain_config as cfg
 from yolo_model import YoloPretraining
 
 

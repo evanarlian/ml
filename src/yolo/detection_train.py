@@ -2,15 +2,16 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 
-import detection_config as cfg
 import torch
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration, set_seed
-from detection_trainer import DetectorTrainer
-from pascalvoc import build_pascalvoc
 from torch import optim
 from torchmetrics import MeanMetric, MetricCollection
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+
+import detection_config as cfg
+from detection_trainer import DetectorTrainer
+from pascalvoc import build_pascalvoc
 from yolo_loss import YoloLoss
 from yolo_model import YoloDetection
 from yolo_scheduler import YoloScheduler

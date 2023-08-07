@@ -1,11 +1,12 @@
 from pathlib import Path
 
 import torch
-from alexnet import AlexNet as MyAlexNet
-from dataset import ImageNet, make_train_aug, make_val_aug
 from datasets import load_dataset
 from torch import Tensor, nn, optim
 from tqdm.auto import tqdm
+
+from alexnet import AlexNet as MyAlexNet
+from dataset import ImageNet, make_train_aug, make_val_aug
 
 
 def calc_topk_acc(y_true: Tensor, logits: Tensor, k: int) -> float:

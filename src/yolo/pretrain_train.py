@@ -1,11 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
-import pretrain_config as cfg
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration, set_seed
-from imagenet import build_imagenet
-from pretrain_trainer import BackboneTrainer
 from torch import nn, optim
 from torchmetrics import (
     Accuracy,
@@ -15,6 +12,10 @@ from torchmetrics import (
     Precision,
     Recall,
 )
+
+import pretrain_config as cfg
+from imagenet import build_imagenet
+from pretrain_trainer import BackboneTrainer
 from yolo_model import YoloPretraining
 
 
