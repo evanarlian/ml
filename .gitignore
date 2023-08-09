@@ -1,8 +1,9 @@
+.ruff_cache/
 data/
 accelerate_logs/
+pretrained_tokenizers/
 *.pt
 *.pickle
-.ruff_cache/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
