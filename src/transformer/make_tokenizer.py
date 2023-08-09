@@ -45,7 +45,7 @@ if __name__ == "__main__":
         "--n_vocab",
         type=int,
         default=30000,
-        help="final vocab (n merges), excluding special tokens",
+        help="final vocab (n merges), including special tokens",
     )
     args = parser.parse_args()
     print(args)
