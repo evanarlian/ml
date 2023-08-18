@@ -1,9 +1,24 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+# TODO pytest device
+# TODO clean up shit in the main func
 # TODO attention mask, this is for different sequence length, pytest material
 # TODO kv_cache, later
+
+
+@dataclass
+class TransformerConfig:
+    n_encoders: int  # number of encoder layers
+    n_decoders: int  # number of decoder layers
+    vocab_sz: int  # number of all possible token ids
+    emb_sz: int  # embedding size for each token
+    n_heads: int  # head size for each head in multihead attention
+    head_sz: int  # number of attention heads
+    pdrop: float  # dropout probability
 
 
 class Embedder(nn.Module):
@@ -57,7 +72,14 @@ class MultiHeadAttention(nn.Module):
         self.attn_drop = nn.Dropout(pdrop)
         self.proj = nn.Linear(n_heads * head_sz, emb_sz)  # TODO bias here?
 
-    def sdpa(self, q: Tensor, k: Tensor, v: Tensor, causal_mask: Tensor | None = None):
+    def sdpa(
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        attn_mask: Tensor | None = None,
+        causal_mask: Tensor | None = None,
+    ):
         """
         Scaled dot product attention.
 
@@ -65,6 +87,7 @@ class MultiHeadAttention(nn.Module):
             q (Tensor): query tensor.
             k (Tensor): key tensor.
             v (Tensor): value tensor.
+            attn_mask (Tensor, optional): Indicator of non padding sequence element
             causal_mask (Tensor, optional): Mask that allows which token to communicate.
 
         Returns:
@@ -75,16 +98,22 @@ class MultiHeadAttention(nn.Module):
         attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq, seq)
         if causal_mask is not None:
             attn = attn.masked_fill(~causal_mask, -torch.inf)
+        if attn_mask is not None:
+            # attn mask blocks whole rows, so if we use -inf, the output will be nan
+            attn = attn.masked_fill(~attn_mask, -1e15)
         attn = self.attn_drop(attn.softmax(-1))
         out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq, n_heads * head_sz)
         return out
 
-    def forward(self, x: Tensor, context: Tensor | None = None) -> Tensor:
+    def forward(
+        self, x: Tensor, attn_mask: Tensor | None = None, context: Tensor | None = None
+    ) -> Tensor:
         """
         Perform multihead attention according to the flavor.
 
         Args:
             x (Tensor): Tensor from previous layer
+            attn_mask (Tensor, optional): Indicator of non padding sequence element
             context (Tensor, optional): Tensor from encoder, only used in flavor "cross"
 
         Returns:
@@ -108,7 +137,11 @@ class MultiHeadAttention(nn.Module):
             # NOTE: we calculate mask on the fly because in original transformer paper,
             # the author uses positional embedding, in theory the seq can be infinite
             causal_mask = torch.ones(seq, seq, dtype=torch.bool, device=x.device).tril()
-        out = self.sdpa(q, k, v, causal_mask)
+        if self.flavor == "vanilla":
+            # TODO i dont know if this is only for vanilla or can be another type
+            assert attn_mask is not None
+            attn_mask = (attn_mask[:, None, :] * attn_mask[:, :, None]).bool()
+        out = self.sdpa(q, k, v, attn_mask, causal_mask)
         out = self.proj(out)
         return out
 
@@ -140,10 +173,10 @@ class EncoderLayer(nn.Module):
         self.resid_drop2 = nn.Dropout(pdrop)
         self.ln2 = nn.LayerNorm(emb_sz)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, attn_mask: Tensor) -> Tensor:
         # NOTE: many transformer implementations now use pre-layer norm
         # i use the original paper instead, because i want to replicate
-        x = self.ln1(x + self.resid_drop1(self.vanilla_multihead(x)))
+        x = self.ln1(x + self.resid_drop1(self.vanilla_multihead(x, attn_mask)))
         x = self.ln2(x + self.resid_drop2(self.ffn(x)))
         return x
 
@@ -176,29 +209,43 @@ class DecoderLayer(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(
-        self,
-        n_encoders: int,
-        n_decoders: int,
-        vocab_sz: int,
-        emb_sz: int,
-        n_heads: int,
-        head_sz: int,
-        pdrop: float,
-    ):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
+        self.config = config
         # transformer encoder
-        self.encoder_embedder = Embedder(vocab_sz, emb_sz, pdrop)
+        self.encoder_embedder = Embedder(
+            vocab_sz=config.vocab_sz,
+            emb_sz=config.emb_sz,
+            pdrop=config.pdrop,
+        )
         self.encoders = nn.Sequential(
-            *[EncoderLayer(emb_sz, n_heads, head_sz, pdrop) for _ in range(n_encoders)]
+            *[
+                EncoderLayer(
+                    emb_sz=config.emb_sz,
+                    n_heads=config.n_heads,
+                    head_sz=config.head_sz,
+                    pdrop=config.pdrop,
+                )
+                for _ in range(config.n_encoders)
+            ]
         )
         # transformer decoder
-        self.decoder_embedder = Embedder(vocab_sz, emb_sz, pdrop)
+        self.decoder_embedder = Embedder(
+            vocab_sz=config.vocab_sz, emb_sz=config.emb_sz, pdrop=config.pdrop
+        )
         self.decoders = nn.ModuleList(
-            [DecoderLayer(emb_sz, n_heads, head_sz, pdrop) for _ in range(n_decoders)]
+            [
+                DecoderLayer(
+                    emb_sz=config.emb_sz,
+                    n_heads=config.n_heads,
+                    head_sz=config.head_sz,
+                    pdrop=config.pdrop,
+                )
+                for _ in range(config.n_decoders)
+            ]
         )
         # final topmost layer
-        self.final_fc = nn.Linear(emb_sz, emb_sz)
+        self.final_fc = nn.Linear(config.emb_sz, config.emb_sz)
 
     def forward(self, encoder_input_ids: Tensor, decoder_input_ids: Tensor) -> Tensor:
         encoded = self.encoder_embedder(encoder_input_ids)
@@ -214,6 +261,7 @@ def main():
     # TODO move all this testing shit in pytest
     # hparams
     #
+    return
     emb_sz = 256
     vocab_sz = 3333
     n_heads = 8
@@ -228,8 +276,6 @@ def main():
     input_ids = torch.randint(0, vocab_sz, (bs, seq))
     embedder = Embedder(vocab_sz, emb_sz, pdrop).cuda()
     print(embedder(input_ids.cuda()).size())
-
-    return
 
     x = torch.randn(bs, seq, emb_sz)  # after the embedder part
     context = torch.randn(bs, seq + 1, emb_sz)  # context seq CAN be different
