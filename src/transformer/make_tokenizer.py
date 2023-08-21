@@ -1,19 +1,9 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from datasets import Dataset
-from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 
-from ds_utils import load_opus_en_id
-
-
-def make_corpus(train_ds: Dataset):
-    sentences = []
-    for batch in tqdm(train_ds.iter(100)):
-        sentences += batch["en"]
-        sentences += batch["id"]
-    return sentences
+from dataset import load_opus_en_id
 
 
 def main(args):
@@ -23,8 +13,8 @@ def main(args):
     # * BPE, same as attention is all you need paper
     # * BART is used as seq2seq, which is the same task as paper
     tokenizer = AutoTokenizer.from_pretrained("facebook/bart-base")
-    opus = load_opus_en_id()
-    train_corpus = make_corpus(opus["train"])
+    opus_train = load_opus_en_id("train")
+    train_corpus = opus_train["en"] + opus_train["id"]
     new_tokenizer = tokenizer.train_new_from_iterator(
         train_corpus, vocab_size=args.n_vocab
     )
