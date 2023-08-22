@@ -26,15 +26,13 @@ Create new tokenizer because we are training model from scratch with custom data
 ```bash
 python src/transformer/make_tokenizer.py --n_vocab 30000
 ```
+Testing
+```bash
+PYTHONPATH=src/transformer pytest src/transformer/ -q
+```
 
 # Results
 kawkawkaw
-
-# TODO NOW
-* ditch tokenizers, just use preexisting and train on my own corpus
-    * see BART and T5 tokenizers (and BPE tokenizer used with NMT)
-    * check how they handle processing for NMT. Is that using pair?
-    * transformers paper uses BPE, i want to do that, but not the end of the world 
 
 # TODO
 * think about pretraining. Do i need that?
