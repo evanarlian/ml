@@ -48,9 +48,10 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
         """
         Implements a general multihead attention. All this class care are:
-        performing attention with given mask;
+        performing attention with given mask:
         * If no mask is required, pass an all True tensor
         * If multiple masks (i.e. causal + attn), pass the &'ed mask
+        Also provides with useful methods as utils.
 
         Args:
             flavor (str): multihead attention type: {"vanilla", "masked", "cross"}
@@ -91,16 +92,7 @@ class MultiHeadAttention(nn.Module):
         return out
 
     def make_causal_mask(self, seq: int, device: torch.device) -> Tensor:
-        """
-        Create causal mask that allows self-attention on current and past tokens.
-
-        Args:
-            seq (int): Sequence length, or time dimension
-            device (torch.device): device for the new causal mask
-
-        Returns:
-            Tensor: causal mask with size (seq, seq)
-        """
+        """Create causal mask that allows self-attention on current and past tokens"""
         return torch.ones(seq, seq, dtype=torch.bool, device=device).tril()
 
     def forward(self, xq: Tensor, xk: Tensor, xv: Tensor, mask: Tensor) -> Tensor:
@@ -128,6 +120,64 @@ class MultiHeadAttention(nn.Module):
         out = self.sdpa(q, k, v, mask)
         out = self.proj(out)
         return out
+
+
+# below are 3 different classes (flavor) of multihead attention
+# they are separated so that the error will not be at runtime
+# plus separation between general and specific implementation
+
+
+# TODO delete all attn_mask because it is so friggin not clear
+# TODO delete all x instances during a not sane forward to just ctx and tgt
+class VanillaMHA(nn.Module):
+    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
+        """Multihead attention with padding attention mask"""
+        super().__init__()
+        self.mha = MultiHeadAttention(emb_sz, n_heads, head_sz, pdrop)
+
+    def forward(self, ctx: Tensor, ctx_pad_mask: Tensor) -> Tensor:
+        # ctx (bs, seq_c, emb_sz)
+        # ctx_pad_mask (bs, seq_c)
+        # below code is to make a pairwise masking (bs, seq_c, seq_c)
+        ctx_pad_mask = (ctx_pad_mask[:, None, :] * ctx_pad_mask[:, :, None]).bool()
+        return self.mha(ctx, ctx, ctx, ctx_pad_mask)
+
+
+class MaskedMHA(nn.Module):
+    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
+        """Multihead attention with padding attention mask and causal mask"""
+        super().__init__()
+        self.mha = MultiHeadAttention(emb_sz, n_heads, head_sz, pdrop)
+
+    def forward(self, tgt: Tensor, tgt_pad_mask: Tensor) -> Tensor:
+        # tgt (bs, seq_t, emb_sz)
+        # tgt_pad_mask (bs, seq_t)
+        # below code is to make a pairwise masking (bs, seq_t, seq_t)
+        tgt_pad_mask = (tgt_pad_mask[:, None, :] * tgt_pad_mask[:, :, None]).bool()
+        causal_mask = self.mha.make_causal_mask(tgt.size(-2), tgt.device)
+        combined_mask = tgt_pad_mask & causal_mask
+        return self.mha(tgt, tgt, tgt, combined_mask)
+
+
+class CrossMHA(nn.Module):
+    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
+        """Multihead attention with cross attn, both encoder and decoder pad mask"""
+        super().__init__()
+        self.mha = MultiHeadAttention(emb_sz, n_heads, head_sz, pdrop)
+
+    def forward(
+        self, ctx: Tensor, ctx_pad_mask: Tensor, tgt: Tensor, tgt_pad_mask: Tensor
+    ) -> Tensor:
+        # ctx (bs, seq_c, emb_sz)
+        # ctx_pad_mask (bs, seq_c)
+        # tgt (bs, seq_t, emb_sz)
+        # tgt_pad_mask (bs, seq_t)
+        # below code is to make a pairwise masking (bs, seq_t, seq_c)
+        tgt_ctx_pad_mask = (tgt_pad_mask[:, None, :] * ctx_pad_mask[:, :, None]).bool()
+        return self.mha(tgt, ctx, ctx, tgt_ctx_pad_mask)
+
+
+# TODO i think the combined masks are all fucked up because of non broadcastability
 
 
 class FeedForward(nn.Module):
