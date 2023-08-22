@@ -16,6 +16,7 @@ class TransformerConfig:
     n_decoders: int  # number of decoder layers
     vocab_sz: int  # number of all possible token ids
     emb_sz: int  # embedding size for each token
+    ff_sz: int  # embedding dimension of feedforward
     n_heads: int  # head size for each head in multihead attention
     head_sz: int  # number of attention heads
     pdrop: float  # dropout probability
@@ -100,6 +101,8 @@ class MultiHeadAttention(nn.Module):
             attn = attn.masked_fill(~causal_mask, -torch.inf)
         if attn_mask is not None:
             # attn mask blocks whole rows, so if we use -inf, the output will be nan
+            print("🔥", attn.size(), attn_mask.size())
+            attn_mask = attn_mask.unsqueeze(-3)
             attn = attn.masked_fill(~attn_mask, -1e15)
         attn = self.attn_drop(attn.softmax(-1))
         out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq, n_heads * head_sz)
@@ -147,12 +150,11 @@ class MultiHeadAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, emb_sz: int):
+    def __init__(self, emb_sz: int, ff_sz: int):
         super().__init__()
-        inner_sz = 4 * emb_sz
-        self.fc1 = nn.Linear(emb_sz, inner_sz)
+        self.fc1 = nn.Linear(emb_sz, ff_sz)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(inner_sz, emb_sz)
+        self.fc2 = nn.Linear(ff_sz, emb_sz)
 
     def forward(self, x: Tensor) -> Tensor:
         # x is (bs, seq, emb_sz)
@@ -160,7 +162,9 @@ class FeedForward(nn.Module):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
+    def __init__(
+        self, emb_sz: int, n_heads: int, head_sz: int, ff_sz: int, pdrop: float
+    ):
         super().__init__()
         # bottom part
         self.vanilla_multihead = MultiHeadAttention(
@@ -169,7 +173,7 @@ class EncoderLayer(nn.Module):
         self.resid_drop1 = nn.Dropout(pdrop)
         self.ln1 = nn.LayerNorm(emb_sz)
         # top part
-        self.ffn = FeedForward(emb_sz)
+        self.ffn = FeedForward(emb_sz, ff_sz)
         self.resid_drop2 = nn.Dropout(pdrop)
         self.ln2 = nn.LayerNorm(emb_sz)
 
@@ -182,7 +186,9 @@ class EncoderLayer(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
+    def __init__(
+        self, emb_sz: int, n_heads: int, head_sz: int, ff_sz: int, pdrop: float
+    ):
         super().__init__()
         # bottom part
         self.masked_multihead = MultiHeadAttention(
@@ -197,11 +203,11 @@ class DecoderLayer(nn.Module):
         self.resid_drop2 = nn.Dropout(pdrop)
         self.ln2 = nn.LayerNorm(emb_sz)
         # top part
-        self.ffn = FeedForward(emb_sz)
+        self.ffn = FeedForward(emb_sz, ff_sz)
         self.resid_drop3 = nn.Dropout(pdrop)
         self.ln3 = nn.LayerNorm(emb_sz)
 
-    def forward(self, x: Tensor, context: Tensor) -> Tensor:
+    def forward(self, context: Tensor, x: Tensor, attn_mask: Tensor) -> Tensor:
         x = self.ln1(x + self.resid_drop1(self.masked_multihead(x)))
         x = self.ln2(x + self.resid_drop2(self.cross_multihead(x, context)))
         x = self.ln3(x + self.resid_drop3(self.ffn(x)))
@@ -218,12 +224,13 @@ class Transformer(nn.Module):
             emb_sz=config.emb_sz,
             pdrop=config.pdrop,
         )
-        self.encoders = nn.Sequential(
-            *[
+        self.encoders = nn.ModuleList(
+            [
                 EncoderLayer(
                     emb_sz=config.emb_sz,
                     n_heads=config.n_heads,
                     head_sz=config.head_sz,
+                    ff_sz=config.ff_sz,
                     pdrop=config.pdrop,
                 )
                 for _ in range(config.n_encoders)
@@ -239,6 +246,7 @@ class Transformer(nn.Module):
                     emb_sz=config.emb_sz,
                     n_heads=config.n_heads,
                     head_sz=config.head_sz,
+                    ff_sz=config.ff_sz,
                     pdrop=config.pdrop,
                 )
                 for _ in range(config.n_decoders)
@@ -247,12 +255,19 @@ class Transformer(nn.Module):
         # final topmost layer
         self.final_fc = nn.Linear(config.emb_sz, config.emb_sz)
 
-    def forward(self, encoder_input_ids: Tensor, decoder_input_ids: Tensor) -> Tensor:
-        encoded = self.encoder_embedder(encoder_input_ids)
-        encoded = self.encoders(encoded)
-        decoded = self.decoder_embedder(decoder_input_ids)
+    def forward(
+        self,
+        enc_input_ids: Tensor,
+        enc_attn_mask: Tensor,
+        dec_input_ids: Tensor,
+        dec_attn_mask: Tensor,
+    ) -> Tensor:
+        encoded = self.encoder_embedder(enc_input_ids)
+        for e in self.encoders:
+            encoded = e(encoded, enc_attn_mask)
+        decoded = self.decoder_embedder(dec_input_ids)
         for d in self.decoders:
-            decoded = d(decoded, encoded)
+            decoded = d(decoded, encoded, dec_attn_mask)
         decoded = self.final_fc(decoded)
         return decoded
 
@@ -261,12 +276,12 @@ def main():
     # TODO move all this testing shit in pytest
     # hparams
     #
-    return
     emb_sz = 256
     vocab_sz = 3333
     n_heads = 8
     head_sz = emb_sz // n_heads  # usually emb_sz == n_heads * head_sz
     pdrop = 0.1
+    ff_sz = emb_sz * 4
     n_encoders = 4
     n_decoders = 5
     # 1. input hparams
@@ -278,23 +293,25 @@ def main():
     print(embedder(input_ids.cuda()).size())
 
     x = torch.randn(bs, seq, emb_sz)  # after the embedder part
+    attn_mask = torch.randint(0, 2, (bs, seq)).bool()
     context = torch.randn(bs, seq + 1, emb_sz)  # context seq CAN be different
     vanilla_head = MultiHeadAttention("vanilla", emb_sz, n_heads, head_sz, pdrop)
-    print(vanilla_head(x).size())
+    print(vanilla_head(x, attn_mask).size())
     masked_head = MultiHeadAttention("masked", emb_sz, n_heads, head_sz, pdrop)
     print(masked_head(x).size())
     cross_head = MultiHeadAttention("cross", emb_sz, n_heads, head_sz, pdrop)
-    print(cross_head(x, context).size())
+    print(cross_head(x, attn_mask, context).size())
 
-    encoder_layer = EncoderLayer(emb_sz, n_heads, head_sz, pdrop)
+    encoder_layer = EncoderLayer(emb_sz, n_heads, head_sz, ff_sz, pdrop)
     print(encoder_layer(x).size())
 
-    decoder_layer = DecoderLayer(emb_sz, n_heads, head_sz, pdrop)
+    decoder_layer = DecoderLayer(emb_sz, n_heads, head_sz, ff_sz, pdrop)
     print(decoder_layer(x, context).size())
 
-    transformer = Transformer(
-        n_encoders, n_decoders, vocab_sz, emb_sz, n_heads, head_sz, pdrop
+    cfg = TransformerConfig(
+        n_encoders, n_decoders, vocab_sz, emb_sz, ff_sz, n_heads, head_sz, pdrop
     )
+    transformer = Transformer(cfg)
     encoder_input_ids = torch.randint(0, vocab_sz, (bs, seq))
     decoder_input_ids = torch.randint(0, vocab_sz, (bs, seq + 2))
     out = transformer(encoder_input_ids, decoder_input_ids)
