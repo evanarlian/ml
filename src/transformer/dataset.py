@@ -62,11 +62,11 @@ class OpusEnId(Dataset):
         # fmt: off
         d = {}
         maxe = max(len(b["enc_input_ids"]) for b in batch)
-        d["enc_input_ids"] = [b["enc_input_ids"] + ([pad] * (maxe-len(b["enc_input_ids"]))) for b in batch]
-        d["enc_attn_mask"] = [b["enc_attn_mask"] + ([0] * (maxe-len(b["enc_attn_mask"]))) for b in batch]
+        d["enc_input_ids"] = [b["enc_input_ids"] + ([pad] * (maxe-len(b["enc_input_ids"]))) for b in batch]  # noqa: E501
+        d["enc_attn_mask"] = [b["enc_attn_mask"] + ([0] * (maxe-len(b["enc_attn_mask"]))) for b in batch]  # noqa: E501
         maxd = max(len(b["dec_input_ids"]) for b in batch)
-        d["dec_input_ids"] = [b["dec_input_ids"] + ([pad] * (maxd-len(b["dec_input_ids"]))) for b in batch]
-        d["dec_attn_mask"] = [b["dec_attn_mask"] + ([0] * (maxd-len(b["dec_attn_mask"]))) for b in batch]
+        d["dec_input_ids"] = [b["dec_input_ids"] + ([pad] * (maxd-len(b["dec_input_ids"]))) for b in batch]  # noqa: E501
+        d["dec_attn_mask"] = [b["dec_attn_mask"] + ([0] * (maxd-len(b["dec_attn_mask"]))) for b in batch]  # noqa: E501
         d["labels"] = [b["labels"] + ([-100] * (maxd-len(b["labels"]))) for b in batch]
         # fmt: on
         d = {k: torch.tensor(v) for k, v in d.items()}
