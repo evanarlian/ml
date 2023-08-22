@@ -44,7 +44,7 @@ class Embedder(nn.Module):
         return x
 
 
-class MultiHeadAttention(nn.Module):
+class MultiHeadAttention2(nn.Module):
     def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
         """
         Implements a general multihead attention. All this class care are:
@@ -82,13 +82,13 @@ class MultiHeadAttention(nn.Module):
         Returns:
             Tensor: Attention multiplied with value tensor.
         """
+        # fmt: off
         bs, n_heads, seq_q, head_sz = q.size()
         attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq_q, seq_k)
         attn = attn.masked_fill(~mask, -1e20)
         attn = self.attn_drop(attn.softmax(-1))
-        out = (
-            (attn @ v).transpose(-2, -3).contiguous().view(bs, seq_q, n_heads * head_sz)
-        )
+        out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq_q, n_heads * head_sz)  # noqa: E501
+        # fmt: on
         return out
 
     def make_causal_mask(self, seq: int, device: torch.device) -> Tensor:
@@ -198,9 +198,7 @@ class EncoderLayer(nn.Module):
     ):
         super().__init__()
         # bottom part
-        self.vanilla_multihead = MultiHeadAttention(
-            "vanilla", emb_sz, n_heads, head_sz, pdrop
-        )
+        self.vanilla_mha = VanillaMHA(emb_sz, n_heads, head_sz, pdrop)
         self.resid_drop1 = nn.Dropout(pdrop)
         self.ln1 = nn.LayerNorm(emb_sz)
         # top part
@@ -208,12 +206,14 @@ class EncoderLayer(nn.Module):
         self.resid_drop2 = nn.Dropout(pdrop)
         self.ln2 = nn.LayerNorm(emb_sz)
 
-    def forward(self, x: Tensor, attn_mask: Tensor) -> Tensor:
+    def forward(self, ctx: Tensor, ctx_pad_mask: Tensor) -> Tensor:
         # NOTE: many transformer implementations now use pre-layer norm
-        # i use the original paper instead, because i want to replicate
-        x = self.ln1(x + self.resid_drop1(self.vanilla_multihead(x, attn_mask)))
-        x = self.ln2(x + self.resid_drop2(self.ffn(x)))
-        return x
+        # I use the original paper instead, because I want to replicate 1 to 1
+        ctx = ctx + self.resid_drop1(self.vanilla_mha(ctx, ctx_pad_mask))
+        ctx = self.ln1(ctx)
+        ctx = ctx + self.resid_drop2(self.ffn(ctx))
+        ctx = self.ln2(ctx)
+        return ctx
 
 
 class DecoderLayer(nn.Module):
@@ -222,15 +222,11 @@ class DecoderLayer(nn.Module):
     ):
         super().__init__()
         # bottom part
-        self.masked_multihead = MultiHeadAttention(
-            "masked", emb_sz, n_heads, head_sz, pdrop
-        )
+        self.masked_mha = MaskedMHA(emb_sz, n_heads, head_sz, pdrop)
         self.resid_drop1 = nn.Dropout(pdrop)
         self.ln1 = nn.LayerNorm(emb_sz)
         # middle part
-        self.cross_multihead = MultiHeadAttention(
-            "cross", emb_sz, n_heads, head_sz, pdrop
-        )
+        self.cross_mha = CrossMHA(emb_sz, n_heads, head_sz, pdrop)
         self.resid_drop2 = nn.Dropout(pdrop)
         self.ln2 = nn.LayerNorm(emb_sz)
         # top part
@@ -238,11 +234,18 @@ class DecoderLayer(nn.Module):
         self.resid_drop3 = nn.Dropout(pdrop)
         self.ln3 = nn.LayerNorm(emb_sz)
 
-    def forward(self, context: Tensor, x: Tensor, attn_mask: Tensor) -> Tensor:
-        x = self.ln1(x + self.resid_drop1(self.masked_multihead(x)))
-        x = self.ln2(x + self.resid_drop2(self.cross_multihead(x, context)))
-        x = self.ln3(x + self.resid_drop3(self.ffn(x)))
-        return x
+    def forward(
+        self, ctx: Tensor, ctx_pad_mask: Tensor, tgt: Tensor, tgt_pad_mask: Tensor
+    ) -> Tensor:
+        # fmt: off
+        tgt = tgt + self.resid_drop1(self.masked_mha(tgt, tgt_pad_mask))
+        tgt = self.ln1(tgt)
+        tgt = tgt + self.resid_drop2(self.cross_mha(ctx, ctx_pad_mask, tgt, tgt_pad_mask))  # noqa: E501
+        tgt = self.ln2(tgt)
+        tgt = tgt + self.resid_drop3(self.ffn(tgt))
+        tgt = self.ln3(tgt)
+        # fmt: on
+        return tgt
 
 
 class Transformer(nn.Module):
