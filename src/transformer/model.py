@@ -45,15 +45,12 @@ class Embedder(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(
-        self, flavor: str, emb_sz: int, n_heads: int, head_sz: int, pdrop: float
-    ):
+    def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
         """
-        Implements multihead attention in 3 different flavors:
-        * vanilla = used in the encoder part, qkv comes from previous layer
-        * masked = used in the bottom part of the decoder, qkv comes from previous layer
-        * cross = used in the upper part of the decoder, kv comes from encoder,
-                  but only q comes from previous (decoder) layer
+        Implements a general multihead attention. All this class care are:
+        performing attention with given mask;
+        * If no mask is required, pass an all True tensor
+        * If multiple masks (i.e. causal + attn), pass the &'ed mask
 
         Args:
             flavor (str): multihead attention type: {"vanilla", "masked", "cross"}
@@ -63,8 +60,6 @@ class MultiHeadAttention(nn.Module):
             pdrop (int): Dropout probability
         """
         super().__init__()
-        assert flavor in {"vanilla", "masked", "cross"}
-        self.flavor = flavor
         self.n_heads = n_heads
         self.head_sz = head_sz
         self.query = nn.Linear(emb_sz, n_heads * head_sz, bias=False)
@@ -73,78 +68,64 @@ class MultiHeadAttention(nn.Module):
         self.attn_drop = nn.Dropout(pdrop)
         self.proj = nn.Linear(n_heads * head_sz, emb_sz)  # TODO bias here?
 
-    def sdpa(
-        self,
-        q: Tensor,
-        k: Tensor,
-        v: Tensor,
-        attn_mask: Tensor | None = None,
-        causal_mask: Tensor | None = None,
-    ):
+    def sdpa(self, q: Tensor, k: Tensor, v: Tensor, mask: Tensor):
         """
         Scaled dot product attention.
 
         Args:
-            q (Tensor): query tensor.
-            k (Tensor): key tensor.
-            v (Tensor): value tensor.
-            attn_mask (Tensor, optional): Indicator of non padding sequence element
-            causal_mask (Tensor, optional): Mask that allows which token to communicate.
+            q (Tensor): query tensor. Size (..., seq_q, n_heads*head_sz)
+            k (Tensor): key tensor. Size (..., seq_k, n_heads*head_sz)
+            v (Tensor): value tensor. Size (..., seq_v, n_heads*head_sz)
+            mask (Tensor): Bool tensor that allows attention.
 
         Returns:
             Tensor: Attention multiplied with value tensor.
         """
-        # q k v is all (bs, n_heads, seq, head_sz)
-        bs, n_heads, seq, head_sz = q.size()
-        attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq, seq)
-        if causal_mask is not None:
-            attn = attn.masked_fill(~causal_mask, -torch.inf)
-        if attn_mask is not None:
-            # attn mask blocks whole rows, so if we use -inf, the output will be nan
-            print("🔥", attn.size(), attn_mask.size())
-            attn_mask = attn_mask.unsqueeze(-3)
-            attn = attn.masked_fill(~attn_mask, -1e15)
+        bs, n_heads, seq_q, head_sz = q.size()
+        attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq_q, seq_k)
+        attn = attn.masked_fill(~mask, -1e20)
         attn = self.attn_drop(attn.softmax(-1))
-        out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq, n_heads * head_sz)
+        out = (
+            (attn @ v).transpose(-2, -3).contiguous().view(bs, seq_q, n_heads * head_sz)
+        )
         return out
 
-    def forward(
-        self, x: Tensor, attn_mask: Tensor | None = None, context: Tensor | None = None
-    ) -> Tensor:
+    def make_causal_mask(self, seq: int, device: torch.device) -> Tensor:
         """
-        Perform multihead attention according to the flavor.
+        Create causal mask that allows self-attention on current and past tokens.
 
         Args:
-            x (Tensor): Tensor from previous layer
-            attn_mask (Tensor, optional): Indicator of non padding sequence element
-            context (Tensor, optional): Tensor from encoder, only used in flavor "cross"
+            seq (int): Sequence length, or time dimension
+            device (torch.device): device for the new causal mask
+
+        Returns:
+            Tensor: causal mask with size (seq, seq)
+        """
+        return torch.ones(seq, seq, dtype=torch.bool, device=device).tril()
+
+    def forward(self, xq: Tensor, xk: Tensor, xv: Tensor, mask: Tensor) -> Tensor:
+        """
+        Perform a multihead attention with projection
+
+        Args:
+            xq (Tensor): Tensor for query weight's input. Size (..., seq_q, emb_sz)
+            xk (Tensor): Tensor for key weight's input. Size (..., seq_k, emb_sz)
+            xv (Tensor): Tensor for value weight's input. Size (..., seq_v, emb_sz)
+            mask (Tensor): Bool tensor that allows attention. The mask has to be
+                broadcastable with q @ k.T, and you can combine them before passing
+                to this method using & tensor operator, for example if you want to use
+                cuasal mask and padding mask at the same time, mask = causal & attn.
 
         Returns:
             Tensor
         """
-        bs, seq, emb_sz = x.size()
-        q = self.query(x).view(bs, seq, self.n_heads, self.head_sz).transpose(-2, -3)
-        # fmt: off
-        if self.flavor == "cross":
-            assert context is not None, "cross attention require context from encoder"
-            ctx_seq = context.size(-2)  # NOTE: in cross, use context's seq for k and v
-            k = self.key(context).view(bs, ctx_seq, self.n_heads, self.head_sz).transpose(-2, -3)  # noqa: E501
-            v = self.value(context).view(bs, ctx_seq, self.n_heads, self.head_sz).transpose(-2, -3)  # noqa: E501
-        else:
-            assert context is None, "vanilla or masked attention does not require encoder context"  # noqa: E501
-            k = self.key(x).view(bs, seq, self.n_heads, self.head_sz).transpose(-2, -3)
-            v = self.value(x).view(bs, seq, self.n_heads, self.head_sz).transpose(-2, -3)  # noqa: E501
-        # fmt: on
-        causal_mask = None
-        if self.flavor == "masked":
-            # NOTE: we calculate mask on the fly because in original transformer paper,
-            # the author uses positional embedding, in theory the seq can be infinite
-            causal_mask = torch.ones(seq, seq, dtype=torch.bool, device=x.device).tril()
-        if self.flavor == "vanilla":
-            # TODO i dont know if this is only for vanilla or can be another type
-            assert attn_mask is not None
-            attn_mask = (attn_mask[:, None, :] * attn_mask[:, :, None]).bool()
-        out = self.sdpa(q, k, v, attn_mask, causal_mask)
+        # rules that must be right in every case (vanilla, causal, cross attn, etc)
+        assert xk.size(-2) == xv.size(-2)
+        bs, seq_q, seq_k, seq_v = xq.size(0), xq.size(-2), xk.size(-2), xv.size(-2)
+        q = self.query(xq).view(bs, seq_q, self.n_heads, self.head_sz).transpose(-2, -3)
+        k = self.key(xk).view(bs, seq_k, self.n_heads, self.head_sz).transpose(-2, -3)
+        v = self.value(xv).view(bs, seq_v, self.n_heads, self.head_sz).transpose(-2, -3)
+        out = self.sdpa(q, k, v, mask)
         out = self.proj(out)
         return out
 
