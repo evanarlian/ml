@@ -1,13 +1,9 @@
 from dataclasses import dataclass
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
-# TODO pytest device
-# TODO clean up shit in the main func
-# TODO attention mask, this is for different sequence length, pytest material
-# TODO kv_cache, later
+# TODO kv_cache
 
 
 @dataclass
@@ -44,7 +40,7 @@ class Embedder(nn.Module):
         return x
 
 
-class MultiHeadAttention2(nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
         """
         Implements a general multihead attention. All this class care are:
@@ -67,7 +63,7 @@ class MultiHeadAttention2(nn.Module):
         self.key = nn.Linear(emb_sz, n_heads * head_sz, bias=False)
         self.value = nn.Linear(emb_sz, n_heads * head_sz, bias=False)
         self.attn_drop = nn.Dropout(pdrop)
-        self.proj = nn.Linear(n_heads * head_sz, emb_sz)  # TODO bias here?
+        self.proj = nn.Linear(n_heads * head_sz, emb_sz, bias=False)
 
     def sdpa(self, q: Tensor, k: Tensor, v: Tensor, mask: Tensor):
         """
@@ -123,12 +119,10 @@ class MultiHeadAttention2(nn.Module):
 
 
 # below are 3 different classes (flavor) of multihead attention
-# they are separated so that the error will not be at runtime
+# they are separated so that most of the error will not be at runtime
 # plus separation between general and specific implementation
 
 
-# TODO delete all attn_mask because it is so friggin not clear
-# TODO delete all x instances during a not sane forward to just ctx and tgt
 class VanillaMHA(nn.Module):
     def __init__(self, emb_sz: int, n_heads: int, head_sz: int, pdrop: float):
         """Multihead attention with padding attention mask"""
@@ -139,7 +133,9 @@ class VanillaMHA(nn.Module):
         # ctx (bs, seq_c, emb_sz)
         # ctx_pad_mask (bs, seq_c)
         # below code is to make a pairwise masking (bs, seq_c, seq_c)
-        ctx_pad_mask = (ctx_pad_mask[:, None, :] * ctx_pad_mask[:, :, None]).bool()
+        ctx_pad_mask = (ctx_pad_mask[:, :, None] * ctx_pad_mask[:, None, :]).bool()
+        # compensate for n_heads by pre-unsqueezing
+        ctx_pad_mask = ctx_pad_mask.unsqueeze(-3)  # (bs, 1, seq_c, seq_c)
         return self.mha(ctx, ctx, ctx, ctx_pad_mask)
 
 
@@ -153,9 +149,11 @@ class MaskedMHA(nn.Module):
         # tgt (bs, seq_t, emb_sz)
         # tgt_pad_mask (bs, seq_t)
         # below code is to make a pairwise masking (bs, seq_t, seq_t)
-        tgt_pad_mask = (tgt_pad_mask[:, None, :] * tgt_pad_mask[:, :, None]).bool()
+        tgt_pad_mask = (tgt_pad_mask[:, :, None] * tgt_pad_mask[:, None, :]).bool()
         causal_mask = self.mha.make_causal_mask(tgt.size(-2), tgt.device)
         combined_mask = tgt_pad_mask & causal_mask
+        # compensate for n_heads by pre-unsqueezing
+        combined_mask = combined_mask.unsqueeze(-3)  # (bs, 1, seq_c, seq_c)
         return self.mha(tgt, tgt, tgt, combined_mask)
 
 
@@ -173,11 +171,10 @@ class CrossMHA(nn.Module):
         # tgt (bs, seq_t, emb_sz)
         # tgt_pad_mask (bs, seq_t)
         # below code is to make a pairwise masking (bs, seq_t, seq_c)
-        tgt_ctx_pad_mask = (tgt_pad_mask[:, None, :] * ctx_pad_mask[:, :, None]).bool()
+        tgt_ctx_pad_mask = (tgt_pad_mask[:, :, None] * ctx_pad_mask[:, None, :]).bool()
+        # compensate for n_heads by pre-unsqueezing
+        tgt_ctx_pad_mask = tgt_ctx_pad_mask.unsqueeze(-3)  # (bs, 1, seq_c, seq_c)
         return self.mha(tgt, ctx, ctx, tgt_ctx_pad_mask)
-
-
-# TODO i think the combined masks are all fucked up because of non broadcastability
 
 
 class FeedForward(nn.Module):
@@ -253,7 +250,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.config = config
         # transformer encoder
-        self.encoder_embedder = Embedder(
+        self.ctx_embedder = Embedder(
             vocab_sz=config.vocab_sz,
             emb_sz=config.emb_sz,
             pdrop=config.pdrop,
@@ -271,7 +268,7 @@ class Transformer(nn.Module):
             ]
         )
         # transformer decoder
-        self.decoder_embedder = Embedder(
+        self.tgt_embedder = Embedder(
             vocab_sz=config.vocab_sz, emb_sz=config.emb_sz, pdrop=config.pdrop
         )
         self.decoders = nn.ModuleList(
@@ -291,65 +288,46 @@ class Transformer(nn.Module):
 
     def forward(
         self,
-        enc_input_ids: Tensor,
-        enc_attn_mask: Tensor,
-        dec_input_ids: Tensor,
-        dec_attn_mask: Tensor,
+        ctx_input_ids: Tensor,
+        ctx_pad_mask: Tensor,
+        tgt_input_ids: Tensor,
+        tgt_pad_mask: Tensor,
     ) -> Tensor:
-        encoded = self.encoder_embedder(enc_input_ids)
+        ctx = self.ctx_embedder(ctx_input_ids)
         for e in self.encoders:
-            encoded = e(encoded, enc_attn_mask)
-        decoded = self.decoder_embedder(dec_input_ids)
+            ctx = e(ctx, ctx_pad_mask)
+        tgt = self.tgt_embedder(tgt_input_ids)
         for d in self.decoders:
-            decoded = d(decoded, encoded, dec_attn_mask)
-        decoded = self.final_fc(decoded)
-        return decoded
+            tgt = d(ctx, ctx_pad_mask, tgt, tgt_pad_mask)
+        tgt = self.final_fc(tgt)
+        return tgt
 
 
 def main():
-    # TODO move all this testing shit in pytest
-    # hparams
-    #
-    emb_sz = 256
-    vocab_sz = 3333
+    # simple sanity check
+    n_encoders = 5
+    n_decoders = 4
+    vocab_sz = 30000
+    emb_sz = 384
+    ff_sz = 4 * emb_sz
     n_heads = 8
-    head_sz = emb_sz // n_heads  # usually emb_sz == n_heads * head_sz
-    pdrop = 0.1
-    ff_sz = emb_sz * 4
-    n_encoders = 4
-    n_decoders = 5
-    # 1. input hparams
-    bs = 4
-    seq = 18
-
-    input_ids = torch.randint(0, vocab_sz, (bs, seq))
-    embedder = Embedder(vocab_sz, emb_sz, pdrop).cuda()
-    print(embedder(input_ids.cuda()).size())
-
-    x = torch.randn(bs, seq, emb_sz)  # after the embedder part
-    attn_mask = torch.randint(0, 2, (bs, seq)).bool()
-    context = torch.randn(bs, seq + 1, emb_sz)  # context seq CAN be different
-    vanilla_head = MultiHeadAttention("vanilla", emb_sz, n_heads, head_sz, pdrop)
-    print(vanilla_head(x, attn_mask).size())
-    masked_head = MultiHeadAttention("masked", emb_sz, n_heads, head_sz, pdrop)
-    print(masked_head(x).size())
-    cross_head = MultiHeadAttention("cross", emb_sz, n_heads, head_sz, pdrop)
-    print(cross_head(x, attn_mask, context).size())
-
-    encoder_layer = EncoderLayer(emb_sz, n_heads, head_sz, ff_sz, pdrop)
-    print(encoder_layer(x).size())
-
-    decoder_layer = DecoderLayer(emb_sz, n_heads, head_sz, ff_sz, pdrop)
-    print(decoder_layer(x, context).size())
-
+    head_sz = emb_sz // n_heads
+    pdrop = 0.2
     cfg = TransformerConfig(
         n_encoders, n_decoders, vocab_sz, emb_sz, ff_sz, n_heads, head_sz, pdrop
     )
-    transformer = Transformer(cfg)
-    encoder_input_ids = torch.randint(0, vocab_sz, (bs, seq))
-    decoder_input_ids = torch.randint(0, vocab_sz, (bs, seq + 2))
-    out = transformer(encoder_input_ids, decoder_input_ids)
-    print(out.size())
+    model = Transformer(cfg)
+
+    # fake inputs
+    bs = 6
+    seq_ctx, seq_tgt = 47, 35  # imagine a machine translation task
+    ctx_input_ids = torch.randint(0, vocab_sz, (bs, seq_ctx))
+    ctx_pad_mask = torch.randint(0, 2, (bs, seq_ctx))
+    tgt_input_ids = torch.randint(0, vocab_sz, (bs, seq_tgt))
+    tgt_pad_mask = torch.randint(0, 2, (bs, seq_tgt))
+    logits = model(ctx_input_ids, ctx_pad_mask, tgt_input_ids, tgt_pad_mask)
+    print(logits.size())
+    print("sanity check complete!")
 
 
 if __name__ == "__main__":
