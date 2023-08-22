@@ -1,6 +1,7 @@
 .ruff_cache/
 data/
 accelerate_logs/
+lightning_logs/
 pretrained_tokenizers/
 *.pt
 *.pickle
