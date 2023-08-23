@@ -3,6 +3,7 @@ data/
 accelerate_logs/
 lightning_logs/
 pretrained_tokenizers/
+wandb/
 *.pt
 *.pickle
 
