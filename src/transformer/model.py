@@ -1,21 +1,9 @@
-from dataclasses import dataclass
-
 import torch
 from torch import Tensor, nn
 
+from config import TransformerConfig
+
 # TODO kv_cache
-
-
-@dataclass
-class TransformerConfig:
-    n_encoders: int  # number of encoder layers
-    n_decoders: int  # number of decoder layers
-    vocab_sz: int  # number of all possible token ids
-    emb_sz: int  # embedding size for each token
-    ff_sz: int  # embedding dimension of feedforward
-    n_heads: int  # head size for each head in multihead attention
-    head_sz: int  # number of attention heads
-    pdrop: float  # dropout probability
 
 
 class Embedder(nn.Module):
