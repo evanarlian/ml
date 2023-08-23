@@ -1,4 +1,3 @@
-from torch import nn, optim
 from torch.optim.lr_scheduler import LRScheduler
 
 
@@ -22,24 +21,3 @@ class TransformerScheduler(LRScheduler):
             step**-0.5, step * self.warmup_steps**-1.5
         )
         return [lrate] * len(self.base_lrs)
-
-
-def main():
-    model = nn.Linear(10, 3)
-    optimizer = optim.Adam(model.parameters())
-    sched = TransformerScheduler(optimizer, emb_sz=384, warmup_steps=4000)
-    lrs = []
-    for i in range(30000):
-        optimizer.step()
-        sched.step()
-        lrs.append(optimizer.param_groups[0]["lr"])
-        if i == 0:
-            print("first lr", optimizer.param_groups[0]["lr"])
-    import matplotlib.pyplot as plt
-
-    plt.plot(lrs)
-    plt.show()
-
-
-if __name__ == "__main__":
-    main()
