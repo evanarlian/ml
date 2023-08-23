@@ -61,13 +61,13 @@ class OpusEnId(Dataset):
         pad = self.tokenizer.pad_token_id
         # fmt: off
         d = {}
-        maxe = max(len(b["ctx_input_ids"]) for b in batch)
-        d["ctx_input_ids"] = [b["ctx_input_ids"] + ([pad] * (maxe-len(b["ctx_input_ids"]))) for b in batch]  # noqa: E501
-        d["ctx_pad_mask"] = [b["ctx_pad_mask"] + ([0] * (maxe-len(b["ctx_pad_mask"]))) for b in batch]  # noqa: E501
-        maxd = max(len(b["tgt_input_ids"]) for b in batch)
-        d["tgt_input_ids"] = [b["tgt_input_ids"] + ([pad] * (maxd-len(b["tgt_input_ids"]))) for b in batch]  # noqa: E501
-        d["tgt_pad_mask"] = [b["tgt_pad_mask"] + ([0] * (maxd-len(b["tgt_pad_mask"]))) for b in batch]  # noqa: E501
-        d["labels"] = [b["labels"] + ([-100] * (maxd-len(b["labels"]))) for b in batch]
+        max_c = max(len(b["ctx_input_ids"]) for b in batch)
+        d["ctx_input_ids"] = [b["ctx_input_ids"] + ([pad] * (max_c-len(b["ctx_input_ids"]))) for b in batch]  # noqa: E501
+        d["ctx_pad_mask"] = [b["ctx_pad_mask"] + ([0] * (max_c-len(b["ctx_pad_mask"]))) for b in batch]  # noqa: E501
+        max_t = max(len(b["tgt_input_ids"]) for b in batch)
+        d["tgt_input_ids"] = [b["tgt_input_ids"] + ([pad] * (max_t-len(b["tgt_input_ids"]))) for b in batch]  # noqa: E501
+        d["tgt_pad_mask"] = [b["tgt_pad_mask"] + ([0] * (max_t-len(b["tgt_pad_mask"]))) for b in batch]  # noqa: E501
+        d["labels"] = [b["labels"] + ([-100] * (max_t-len(b["labels"]))) for b in batch]
         # fmt: on
         d = {k: torch.tensor(v) for k, v in d.items()}
         return d
