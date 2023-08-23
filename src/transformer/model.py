@@ -69,7 +69,7 @@ class MultiHeadAttention(nn.Module):
         # fmt: off
         bs, n_heads, seq_q, head_sz = q.size()
         attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq_q, seq_k)
-        attn = attn.masked_fill(~mask, -1e20)
+        attn = attn.masked_fill(~mask, -5e4)  # NOTE: if too small will fail fp16 
         attn = self.attn_drop(attn.softmax(-1))
         out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq_q, n_heads * head_sz)  # noqa: E501
         # fmt: on
@@ -272,7 +272,7 @@ class Transformer(nn.Module):
             ]
         )
         # final topmost layer
-        self.final_fc = nn.Linear(config.emb_sz, config.emb_sz)
+        self.final_fc = nn.Linear(config.emb_sz, config.vocab_sz)
 
     def forward(
         self,
