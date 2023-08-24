@@ -37,18 +37,20 @@ class OpusEnId(Dataset):
         # collate_fn alongside the tensor conversion. What we are doing here is
         # similar to huggingface's DataCollatorFor...
         row = self.ds[i]
-        enc = self.tokenizer(
+        ctx = self.tokenizer(
             text=row["en"], truncation=True, max_length=self.max_length
         )
-        dec = self.tokenizer(
+        tgt = self.tokenizer(
             text_target=row["id"], truncation=True, max_length=self.max_length + 1
         )
         d = {
-            "ctx_input_ids": enc["input_ids"],
-            "ctx_pad_mask": enc["attention_mask"],
-            "tgt_input_ids": dec["input_ids"][:-1],
-            "tgt_pad_mask": dec["attention_mask"][:-1],
-            "labels": dec["input_ids"][1:],
+            "ctx_text": row["en"],
+            "ctx_input_ids": ctx["input_ids"],
+            "ctx_pad_mask": ctx["attention_mask"],
+            "tgt_text": row["id"],
+            "tgt_input_ids": tgt["input_ids"][:-1],
+            "tgt_pad_mask": tgt["attention_mask"][:-1],
+            "labels": tgt["input_ids"][1:],
         }
         return d
 
@@ -59,8 +61,8 @@ class OpusEnId(Dataset):
         # * pad label with -100, to ignore during crossentropyloss
         # * convert to torch tensor
         pad = self.tokenizer.pad_token_id
-        # fmt: off
         d = {}
+        # fmt: off
         max_c = max(len(b["ctx_input_ids"]) for b in batch)
         d["ctx_input_ids"] = [b["ctx_input_ids"] + ([pad] * (max_c-len(b["ctx_input_ids"]))) for b in batch]  # noqa: E501
         d["ctx_pad_mask"] = [b["ctx_pad_mask"] + ([0] * (max_c-len(b["ctx_pad_mask"]))) for b in batch]  # noqa: E501
@@ -68,11 +70,15 @@ class OpusEnId(Dataset):
         d["tgt_input_ids"] = [b["tgt_input_ids"] + ([pad] * (max_t-len(b["tgt_input_ids"]))) for b in batch]  # noqa: E501
         d["tgt_pad_mask"] = [b["tgt_pad_mask"] + ([0] * (max_t-len(b["tgt_pad_mask"]))) for b in batch]  # noqa: E501
         d["labels"] = [b["labels"] + ([-100] * (max_t-len(b["labels"]))) for b in batch]
-        # fmt: on
         d = {k: torch.tensor(v) for k, v in d.items()}
+        # fmt: on
+        d["ctx_text"] = [b["ctx_text"] for b in batch]
+        d["tgt_text"] = [b["tgt_text"] for b in batch]
         return d
 
-    def create_dataloader(self, batch_size: int, shuffle: bool, num_workers: int):
+    def create_dataloader(
+        self, batch_size: int, shuffle: bool, num_workers: int, drop_last: bool
+    ):
         return DataLoader(
             self,
             batch_size=batch_size,
@@ -80,7 +86,7 @@ class OpusEnId(Dataset):
             num_workers=num_workers,
             collate_fn=self.collate_fn,
             pin_memory=True,
-            drop_last=True,
+            drop_last=drop_last,
         )
 
 
@@ -93,9 +99,14 @@ def main():
     train_ds = OpusEnId(split="train", tokenizer=tokenizer, max_length=512)
     print(train_ds)
     print(train_ds[0].keys())
-    dl = train_ds.create_dataloader(batch_size=256, shuffle=True, num_workers=6)
+    dl = train_ds.create_dataloader(
+        batch_size=256, shuffle=True, num_workers=6, drop_last=False
+    )
     for batch in tqdm(dl):
-        batch = {k: v.to("cuda") for k, v in batch.items()}
+        batch = {
+            k: v.to("cuda") if isinstance(v, torch.Tensor) else v
+            for k, v in batch.items()
+        }
 
 
 if __name__ == "__main__":
