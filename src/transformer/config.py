@@ -21,7 +21,10 @@ class TrainConfig:
     test_bs: int
     num_workers: int
     n_epochs: int
-    lr: float
+    pretrained_tokenizer: str
+    max_token_length: int
+    label_smoothing: float
+    sched_warmup: int
 
 
 transformer_cfg = TransformerConfig(
@@ -42,5 +45,8 @@ train_cfg = TrainConfig(
     test_bs=64,
     num_workers=4,
     n_epochs=10,
-    lr=0.001,
+    pretrained_tokenizer="pretrained_tokenizers/bart_bpe_opus_en_id_30000",
+    max_token_length=64,  # most sentences are under 64 tokens
+    label_smoothing=0.1,
+    sched_warmup=4000,
 )
