@@ -102,7 +102,7 @@ def main():
     dl = train_ds.create_dataloader(
         batch_size=256, shuffle=True, num_workers=6, drop_last=False
     )
-    for batch in tqdm(dl):
+    for i, batch in zip(range(100), tqdm(dl)):
         batch = {
             k: v.to("cuda") if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
