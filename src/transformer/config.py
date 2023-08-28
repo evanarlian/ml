@@ -31,11 +31,11 @@ transformer_cfg = TransformerConfig(
     n_encoders=4,
     n_decoders=4,
     vocab_sz=30000,
-    emb_sz=256,
-    ff_sz=256 * 4,
+    emb_sz=512,
+    ff_sz=512 * 4,
     n_heads=8,
-    head_sz=256 // 8,
-    pdrop=0.2,
+    head_sz=512 // 8,
+    pdrop=0.1,
 )
 
 train_cfg = TrainConfig(
