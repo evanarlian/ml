@@ -3,19 +3,21 @@ from pathlib import Path
 import lightning as L
 import torch
 import torch.nn.functional as F
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import (
+    LearningRateMonitor,
+    ModelCheckpoint,
+    RichProgressBar,
+)
 from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger, WandbLogger
 from torch import nn, optim
+from torchmetrics.text import Perplexity, SacreBLEUScore
 from transformers import BartTokenizer
 
 from config import TrainConfig, TransformerConfig, train_cfg, transformer_cfg
 from dataset import OpusEnId
 from model import Transformer
 from scheduler import TransformerScheduler
-from torchmetrics import Perplexity
-from torchmetrics.text import BLEUScore
-
-# TODO lr callbacks, wandb, log text and, so we need utils for decoding?
+from utils import get_version, translate
 
 
 class LitTransformer(L.LightningModule):
@@ -26,12 +28,18 @@ class LitTransformer(L.LightningModule):
         tokenizer_dir: Path,
     ):
         super().__init__()
+        self.save_hyperparameters()
         self.transformer_cfg = transformer_cfg
         self.train_cfg = train_cfg
         self.model = Transformer(transformer_cfg)
         self.criterion = nn.CrossEntropyLoss(label_smoothing=train_cfg.label_smoothing)
         self.tokenizer = BartTokenizer.from_pretrained(tokenizer_dir)
-        self.save_hyperparameters()
+        # metrics
+        self.train_ppl = Perplexity()
+        self.val_ppl = Perplexity()
+        self.val_bleu = SacreBLEUScore()
+        self.test_ppl = Perplexity()
+        self.test_bleu = SacreBLEUScore()
 
     def _one_step(self, batch):
         logits = self.model(
@@ -41,21 +49,45 @@ class LitTransformer(L.LightningModule):
             batch["tgt_pad_mask"],
         )
         loss = F.cross_entropy(logits.transpose(-1, -2), batch["labels"])
-        return loss
+        bs = len(batch["ctx_input_ids"])
+        # because batch dict contains str, pass batch size in self.log
+        return (logits, loss, bs)
 
     def training_step(self, batch, batch_idx):
-        loss = self._one_step(batch)
-        self.log("train/loss", loss, prog_bar=True)
+        logits, loss, bs = self._one_step(batch)
+        self.train_ppl(logits.float(), batch["labels"])
+        self.log("train/loss", loss, prog_bar=True, batch_size=bs)
+        self.log("train/perplexity", self.train_ppl, batch_size=bs)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self._one_step(batch)
-        self.log("val/loss", loss, prog_bar=True)
+        logits, loss, bs = self._one_step(batch)
+        translated = translate(
+            self.model,
+            self.tokenizer,
+            max_gen_length=self.train_cfg.max_token_length,
+            text=batch["ctx_text"],
+        )
+        self.val_bleu(translated, [batch["tgt_text"]])
+        self.val_ppl(logits.float(), batch["labels"])
+        self.log("val/loss", loss, prog_bar=True, batch_size=bs)
+        self.log("val/perplexity", self.val_ppl, prog_bar=True, batch_size=bs)
+        self.log("val/sacrebleu", self.val_bleu, prog_bar=True, batch_size=bs)
         return loss
 
     def test_step(self, batch, batch_idx):
-        loss = self._one_step(batch)
-        self.log("test/loss", loss, prog_bar=True)
+        logits, loss, bs = self._one_step(batch)
+        translated = translate(
+            self.model,
+            self.tokenizer,
+            max_gen_length=self.train_cfg.max_token_length,
+            text=batch["ctx_text"],
+        )
+        self.test_bleu(translated, [batch["tgt_text"]])
+        self.test_ppl(logits.float(), batch["labels"])
+        self.log("test/loss", loss, batch_size=bs)
+        self.log("test/perplexity", self.test_ppl, batch_size=bs)
+        self.log("test/sacrebleu", self.test_bleu, batch_size=bs)
         return loss
 
     def configure_optimizers(self):
@@ -112,28 +144,13 @@ class LitTransformer(L.LightningModule):
         )
 
 
-def get_version(root_dir: Path, log_dir: str = "lightning_logs"):
-    """Extract number from every version and find new max version"""
-    max_ver = 0
-    log_path = root_dir / log_dir
-    if not log_path.exists():
-        return 0
-    for ver in (root_dir / log_dir).iterdir():
-        try:
-            max_ver = max(max_ver, int(ver.name.split("_")[-1]))
-        except ValueError:
-            pass
-    return max_ver + 1
-
-
 def main():
-    # TODO remove v_num in progress bar?
+    # TODO remove v_num in progress bar? https://lightning.ai/docs/pytorch/latest/extensions/logging.html#progress-bar
     # TODO wandb state is still finished when killed (ctrl-c)
-    # TODO model checkpoint callback
+    # TODO model checkpoint callback, best loss, best bleu
+    # TODO make new wandb
     # setup
-    # print("🔥", transformer_cfg)
-    # print("🔥", train_cfg)
-    L.seed_everything(train_cfg.seed)
+    train_cfg.seed = L.seed_everything(train_cfg.seed)  # seed will be selected if None
     root_dir = Path("src/transformer")
     tokenizer_dir = root_dir / train_cfg.pretrained_tokenizer
     torch.set_float32_matmul_precision("high")  # TODO training is slower with this
@@ -148,30 +165,27 @@ def main():
 
     # trainer stuffs
     callbacks = [
-        LearningRateMonitor("step"),
+        LearningRateMonitor(logging_interval="step"),
+        RichProgressBar(),
     ]
-
     loggers = [
         CSVLogger(root_dir, version=exp_version),
         TensorBoardLogger(root_dir, version=exp_version),
         WandbLogger(project="shitty_transformer", save_dir=root_dir),
     ]
-    # TODO i kinda want to do dry run rn :((
     trainer = L.Trainer(
         accelerator="gpu",
         # accelerator="cpu",
         precision="16-mixed",
-        # fast_dev_run=4,
+        # fast_dev_run=10,
         max_epochs=train_cfg.n_epochs,
-        overfit_batches=0.0,  # default TODO does this enable weird shit?
-        log_every_n_steps=50,  # default
         val_check_interval=2000,
-        # check_val_every_n_epoch=None,
         default_root_dir=root_dir,
         logger=loggers,
         callbacks=callbacks,
     )
     trainer.fit(lit_model)
+    trainer.test(lit_model)
 
 
 if __name__ == "__main__":

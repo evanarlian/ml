@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 from torch import Tensor
 from transformers import BartTokenizer, PreTrainedTokenizer
@@ -76,6 +78,20 @@ def translate(
     # return back the training state
     model.train(orig_train_state)
     return result
+
+
+def get_version(root_dir: Path, log_dir: str = "lightning_logs"):
+    """Extract number from every version and find new max version"""
+    max_ver = 0
+    log_path = root_dir / log_dir
+    if not log_path.exists():
+        return 0
+    for ver in (root_dir / log_dir).iterdir():
+        try:
+            max_ver = max(max_ver, int(ver.name.split("_")[-1]))
+        except ValueError:
+            pass
+    return max_ver + 1
 
 
 def main():
