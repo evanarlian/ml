@@ -25,11 +25,12 @@ class TrainConfig:
     max_token_length: int
     label_smoothing: float
     sched_warmup: int
+    grad_accum: int
 
 
 transformer_cfg = TransformerConfig(
-    n_encoders=4,
-    n_decoders=4,
+    n_encoders=6,
+    n_decoders=6,
     vocab_sz=30000,
     emb_sz=512,
     ff_sz=512 * 4,
@@ -43,10 +44,11 @@ train_cfg = TrainConfig(
     train_bs=64,
     val_bs=64,
     test_bs=64,
-    num_workers=4,
-    n_epochs=10,
+    num_workers=8,
+    n_epochs=15,
     pretrained_tokenizer="pretrained_tokenizers/bart_bpe_opus_en_id_30000",
     max_token_length=64,  # most sentences are under 64 tokens
     label_smoothing=0.1,
     sched_warmup=4000,
+    grad_accum=2,
 )

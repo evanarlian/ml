@@ -35,10 +35,7 @@ class LitTransformer(L.LightningModule):
         self.criterion = nn.CrossEntropyLoss(label_smoothing=train_cfg.label_smoothing)
         self.tokenizer = BartTokenizer.from_pretrained(tokenizer_dir)
         # metrics
-        self.train_ppl = Perplexity()
-        self.val_ppl = Perplexity()
         self.val_bleu = SacreBLEUScore()
-        self.test_ppl = Perplexity()
         self.test_bleu = SacreBLEUScore()
 
     def _one_step(self, batch):
@@ -55,9 +52,7 @@ class LitTransformer(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         logits, loss, bs = self._one_step(batch)
-        self.train_ppl(logits.float(), batch["labels"])
         self.log("train/loss", loss, prog_bar=True, batch_size=bs)
-        self.log("train/perplexity", self.train_ppl, batch_size=bs)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -69,9 +64,7 @@ class LitTransformer(L.LightningModule):
             text=batch["ctx_text"],
         )
         self.val_bleu(translated, [batch["tgt_text"]])
-        self.val_ppl(logits.float(), batch["labels"])
         self.log("val/loss", loss, prog_bar=True, batch_size=bs)
-        self.log("val/perplexity", self.val_ppl, prog_bar=True, batch_size=bs)
         self.log("val/sacrebleu", self.val_bleu, prog_bar=True, batch_size=bs)
         return loss
 
@@ -84,9 +77,7 @@ class LitTransformer(L.LightningModule):
             text=batch["ctx_text"],
         )
         self.test_bleu(translated, [batch["tgt_text"]])
-        self.test_ppl(logits.float(), batch["labels"])
         self.log("test/loss", loss, batch_size=bs)
-        self.log("test/perplexity", self.test_ppl, batch_size=bs)
         self.log("test/sacrebleu", self.test_bleu, batch_size=bs)
         return loss
 
@@ -145,10 +136,8 @@ class LitTransformer(L.LightningModule):
 
 
 def main():
-    # TODO remove v_num in progress bar? https://lightning.ai/docs/pytorch/latest/extensions/logging.html#progress-bar
     # TODO wandb state is still finished when killed (ctrl-c)
     # TODO model checkpoint callback, best loss, best bleu
-    # TODO make new wandb
     # setup
     train_cfg.seed = L.seed_everything(train_cfg.seed)  # seed will be selected if None
     root_dir = Path("src/transformer")
@@ -171,13 +160,14 @@ def main():
     loggers = [
         CSVLogger(root_dir, version=exp_version),
         TensorBoardLogger(root_dir, version=exp_version),
-        WandbLogger(project="shitty_transformer", save_dir=root_dir),
+        WandbLogger(project="transformer_mt", save_dir=root_dir),
     ]
     trainer = L.Trainer(
         accelerator="gpu",
         # accelerator="cpu",
         precision="16-mixed",
         # fast_dev_run=10,
+        accumulate_grad_batches=train_cfg.grad_accum,
         max_epochs=train_cfg.n_epochs,
         val_check_interval=2000,
         default_root_dir=root_dir,
