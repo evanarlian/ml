@@ -38,7 +38,6 @@ class MultiHeadAttention(nn.Module):
         Also provides with useful methods as utils.
 
         Args:
-            flavor (str): multihead attention type: {"vanilla", "masked", "cross"}
             emb_sz (int): Embedding size
             n_heads (int): Number of attention heads
             head_sz (int): Size of each attention head
@@ -64,15 +63,13 @@ class MultiHeadAttention(nn.Module):
             mask (Tensor): Bool tensor that allows attention.
 
         Returns:
-            Tensor: Attention multiplied with value tensor.
+            Tensor: Attn multiplied with value. Size (..., seq_q, n_heads*head_sz)
         """
-        # fmt: off
-        bs, n_heads, seq_q, head_sz = q.size()
-        attn = q @ k.transpose(-1, -2) / (head_sz**0.5)  # (bs, n_heads, seq_q, seq_k)
-        attn = attn.masked_fill(~mask, -5e4)  # NOTE: if too small will fail fp16 
+        # attn shape will be (bs, n_heads, seq_q, seq_k)
+        attn = q @ k.transpose(-1, -2) / (self.head_sz**0.5)
+        attn = attn.masked_fill(~mask, -5e4)  # NOTE: if too small will fail fp16
         attn = self.attn_drop(attn.softmax(-1))
-        out = (attn @ v).transpose(-2, -3).contiguous().view(bs, seq_q, n_heads * head_sz)  # noqa: E501
-        # fmt: on
+        out = attn @ v
         return out
 
     def make_causal_mask(self, seq: int, device: torch.device) -> Tensor:
@@ -102,6 +99,8 @@ class MultiHeadAttention(nn.Module):
         k = self.key(xk).view(bs, seq_k, self.n_heads, self.head_sz).transpose(-2, -3)
         v = self.value(xv).view(bs, seq_v, self.n_heads, self.head_sz).transpose(-2, -3)
         out = self.sdpa(q, k, v, mask)
+        # NOTE: below is using reshape because view cannot work on non-contiguous tensor
+        out = out.transpose(-2, -3).reshape(bs, seq_q, self.n_heads * self.head_sz)
         out = self.proj(out)
         return out
 
