@@ -32,6 +32,10 @@ Testing using pytest
 ```bash
 PYTHONPATH=src/transformer pytest src/transformer/ -q
 ```
+Streamlit app
+```bash
+streamlit run src/transformer/streamlit_app.py
+```
 
 # Results
 English to Indonesian translation got about 14.0 and 18.0 SacreBLEU score on test and validation set respectively. For the metrics see on [wandb](https://wandb.ai/evanarlian/transformer_mt).
