@@ -5,12 +5,11 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.callbacks import (
     LearningRateMonitor,
-    ModelCheckpoint,
     RichProgressBar,
 )
 from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger, WandbLogger
 from torch import nn, optim
-from torchmetrics.text import Perplexity, SacreBLEUScore
+from torchmetrics.text import SacreBLEUScore
 from transformers import BartTokenizer
 
 from config import TrainConfig, TransformerConfig, train_cfg, transformer_cfg
@@ -136,13 +135,11 @@ class LitTransformer(L.LightningModule):
 
 
 def main():
-    # TODO wandb state is still finished when killed (ctrl-c)
-    # TODO model checkpoint callback, best loss, best bleu
     # setup
     train_cfg.seed = L.seed_everything(train_cfg.seed)  # seed will be selected if None
     root_dir = Path("src/transformer")
     tokenizer_dir = root_dir / train_cfg.pretrained_tokenizer
-    torch.set_float32_matmul_precision("high")  # TODO training is slower with this
+    torch.set_float32_matmul_precision("high")  # NOTE train might be slower using this
     exp_version = get_version(root_dir)
 
     # model
@@ -157,6 +154,7 @@ def main():
         LearningRateMonitor(logging_interval="step"),
         RichProgressBar(),
     ]
+    # NOTE wandb state will still be "Finished" when ctrl-c'ed
     loggers = [
         CSVLogger(root_dir, version=exp_version),
         TensorBoardLogger(root_dir, version=exp_version),
@@ -169,7 +167,8 @@ def main():
         # fast_dev_run=10,
         accumulate_grad_batches=train_cfg.grad_accum,
         max_epochs=train_cfg.n_epochs,
-        val_check_interval=2000,
+        val_check_interval=2000,  # if 1 train epoch is too long
+        # check_val_every_n_epoch=None,  # if 1 train epoch is too short
         default_root_dir=root_dir,
         logger=loggers,
         callbacks=callbacks,
