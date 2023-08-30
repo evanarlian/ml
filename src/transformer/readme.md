@@ -34,20 +34,21 @@ PYTHONPATH=src/transformer pytest src/transformer/ -q
 ```
 
 # Results
-English to Indonesian translation got about 6.0 and 15.0 SacreBLEU score on test and validation set respectively. Pretty bad on paper.
+English to Indonesian translation got about 14.0 and 18.0 SacreBLEU score on test and validation set respectively. For the metrics see on [wandb](https://wandb.ai/evanarlian/transformer_mt).
 
-See more on `translate.ipynb`, below are some of the example. For the metrics see on wandb.  TODO
-| English | Indonesian (t=0.5) | Indonesian (t=1.2) |
-|-|-|-|
-| The cat sat on the mat. | Kucing duduk di matt. | Kucing hantu sepuluh untuk bertambah. |
-| I have a red ball.     | Aku punya bola merah. | Aku punya memungkinkanBer keluargamuwa merah |
-| Inflation targeting has become a popular strategy for central banks in recent years. | Dalam beberapa tahun yang lalu, pengejaran yang menjadi strategi populer bagi bank pusat dalam beberapa tahun ini. | diaApalagi mendSayang menjadi strategi inti mohon gue TV selama keimanan ini |
-| The theory of relativity reshaped our understanding of space, time, and gravity. | Teori dari hubungan kami dengan beberapa masa lalu, dan gravitasi. | T detektifZi menulisnya dari giliran papan keluar hidup kita, waktu, dan gravitasi. |
+See more on `translate.ipynb`, below are some of the example.
+| English                          | Indonesian (t=0.3)                          | Indonesian (t=1.2)                                        |
+|:---------------------------------|:--------------------------------------------|:-----------------------------------------------------------|
+| The cat sat on the mat.          | Kucing duduk di atas matras.                | ketika menemui kucing itu untuk sebuah melainkan terputus. |
+| My teddy bear is so cuddly.      | Beruang Bantengku sangat marah.             | itasuoLagipula begitu mintaasnya vaksin.                   |
+| Let's read a fun story together. | Mari kita baca cerita menyenangkan bersama. | Ket bercerita menyenangkan bersama-sama.                   |
+| The principles of genetic engineering have revolutionized the field of biotechnology. | Prinsip dari teknik genetik telah telah mencapai bidang biotenologi biote. | Prinsip dari teknik genetik telah menghubungkan jauhnya secara bi pen kendali biote detik.                                           |
+| Postmodern literature often blurs the line between fiction and reality.               | Postmodern sastra sering berbaur antara fiksi dan kenyataan.               | Dia seringlo arwah dengan cahayaKhusus pamanku, katamu pesta perpisahan dengan bat Datang saat jangkaasaan menyuntikkan titik ajaib. |
 
 
 # TODO
-* clean wandb
 * clean todos
+* pytest
 * attention visualization like bertviz!!!!!!!!!!11
 
 # Implementation details
