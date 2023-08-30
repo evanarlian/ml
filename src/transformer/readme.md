@@ -45,15 +45,11 @@ See more on `translate.ipynb`, below are some of the example.
 | The principles of genetic engineering have revolutionized the field of biotechnology. | Prinsip dari teknik genetik telah telah mencapai bidang biotenologi biote. | Prinsip dari teknik genetik telah menghubungkan jauhnya secara bi pen kendali biote detik.                                           |
 | Postmodern literature often blurs the line between fiction and reality.               | Postmodern sastra sering berbaur antara fiksi dan kenyataan.               | Dia seringlo arwah dengan cahayaKhusus pamanku, katamu pesta perpisahan dengan bat Datang saat jangkaasaan menyuntikkan titik ajaib. |
 
-
-# TODO
-* clean todos
-* pytest
-* attention visualization like bertviz!!!!!!!!!!11
-
 # Implementation details
 * Original tasks in the paper are English to German and English to French translation. This project is English to Indonesian (so that I can verify the quality).
 * The dataset for English-Indonesian is obtained from OPUS (1mil), while English-German (4.5mil) and English-French (36mil) are obtained from WMT 2014. This might explain the low SacreBLEU score.
+* The layernorm used is the original, though latest implementations suggest that we should use pre-norm instead.
+* While useful for autoregression during generation, kv-cache is not yet implemented.
 
 # References
 * [Attention Is All You Need](https://arxiv.org/abs/1706.03762)

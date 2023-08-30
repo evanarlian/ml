@@ -3,8 +3,6 @@ from torch import Tensor, nn
 
 from config import TransformerConfig
 
-# TODO kv_cache
-
 
 class Embedder(nn.Module):
     def __init__(self, vocab_sz: int, emb_sz: int, pdrop: float):

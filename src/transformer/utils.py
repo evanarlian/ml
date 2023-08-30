@@ -95,7 +95,6 @@ def get_version(root_dir: Path, log_dir: str = "lightning_logs"):
 
 
 def main():
-    # TODO pytest
     from model import Transformer, TransformerConfig
 
     cfg = TransformerConfig(
@@ -113,6 +112,7 @@ def main():
     tokenizer = BartTokenizer.from_pretrained(tokenizer_dir)
     result = translate(model, tokenizer, max_gen_length=100, text=["meme", "dog"])
     print(result)
+    print("sanity check complete!")
 
 
 if __name__ == "__main__":
