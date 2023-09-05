@@ -38,9 +38,9 @@ streamlit run src/transformer/streamlit_app.py
 ```
 
 # Results
-English to Indonesian translation got about 14.0 and 18.0 SacreBLEU score on test and validation set respectively. For the metrics see on [wandb](https://wandb.ai/evanarlian/transformer_mt).
+English to Indonesian translation got about 14.0 and 18.0 SacreBLEU score on test and validation set respectively. For the metrics see on [wandb](https://wandb.ai/evanarlian/transformer_mt). See all result on `demo.ipynb`, below are some of the example.
 
-See more on `translate.ipynb`, below are some of the example.
+## Translation
 | English                          | Indonesian (t=0.3)                          | Indonesian (t=1.2)                                        |
 |:---------------------------------|:--------------------------------------------|:-----------------------------------------------------------|
 | The cat sat on the mat.          | Kucing duduk di atas matras.                | ketika menemui kucing itu untuk sebuah melainkan terputus. |
@@ -49,11 +49,17 @@ See more on `translate.ipynb`, below are some of the example.
 | The principles of genetic engineering have revolutionized the field of biotechnology. | Prinsip dari teknik genetik telah telah mencapai bidang biotenologi biote. | Prinsip dari teknik genetik telah menghubungkan jauhnya secara bi pen kendali biote detik.                                           |
 | Postmodern literature often blurs the line between fiction and reality.               | Postmodern sastra sering berbaur antara fiksi dan kenyataan.               | Dia seringlo arwah dengan cahayaKhusus pamanku, katamu pesta perpisahan dengan bat Datang saat jangkaasaan menyuntikkan titik ajaib. |
 
+## Attention visualization
+We can also visualize attention for every heads in every encoder or decoder layers.
+![](assets/simple.png)
+![](assets/hard.png)
+
 # Implementation details
 * Original tasks in the paper are English to German and English to French translation. This project is English to Indonesian (so that I can verify the quality).
 * The dataset for English-Indonesian is obtained from OPUS (1mil), while English-German (4.5mil) and English-French (36mil) are obtained from WMT 2014. This might explain the low SacreBLEU score.
 * The layernorm used is the original, though latest implementations suggest that we should use pre-norm instead.
 * While useful for autoregression during generation, kv-cache is not yet implemented.
+* The model implementation is not designed to return attentions, so to get the attentions, we need to do some hacky-monkey-patching stuffs. 
 
 # References
 * [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
