@@ -1,7 +1,7 @@
 # Transformer
 
 ## Overview
-* The core idea of (encoder-decoder) transformer is sequence transduction. Simply, a transformer converts a sequence to another sequence that might differ in length.
+* The core idea of (encoder-decoder) transformer is sequence transduction. Simply, a transformer converts a sequence to another sequence that might differ in length. This task is called conditional generation (in Hugging Face, at least) because during generation, the model also looks at encoder output alongside with the previous target tokens.
 * Transformer encoder uses standard self attention.
 * Transformer decoder uses 2 types of attention, causal attention and cross attention.
 * The target is shifted right, to create something called teacher forcing.
@@ -58,8 +58,9 @@ We can also visualize attention for every heads in every encoder or decoder laye
 * Original tasks in the paper are English to German and English to French translation. This project is English to Indonesian (so that I can verify the quality).
 * The dataset for English-Indonesian is obtained from OPUS (1mil), while English-German (4.5mil) and English-French (36mil) are obtained from WMT 2014. This might explain the low SacreBLEU score.
 * The layernorm used is the original, though latest implementations suggest that we should use pre-norm instead.
+* During batch conditional text generation (translation), the padding is on the right. Some models might require paddings to be on the left, but doesn't that impact the positional encoding? See the [discussion](https://discuss.pytorch.org/t/right-vs-left-padding/185050/2).
 * While useful for autoregression during generation, kv-cache is not yet implemented.
-* The model implementation is not designed to return attentions, so to get the attentions, we need to do some hacky-monkey-patching stuffs. 
+* The model implementation is not designed to return attentions, so to get the attentions, we need to do some hacky-monkey-patching stuffs.
 
 # References
 * [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
