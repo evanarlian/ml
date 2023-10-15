@@ -55,13 +55,13 @@ class MultiHeadAttention(nn.Module):
         Scaled dot product attention.
 
         Args:
-            q (Tensor): query tensor. Size (..., seq_q, n_heads*head_sz)
-            k (Tensor): key tensor. Size (..., seq_k, n_heads*head_sz)
-            v (Tensor): value tensor. Size (..., seq_v, n_heads*head_sz)
+            q (Tensor): query tensor. Size (..., seq_q, head_sz)
+            k (Tensor): key tensor. Size (..., seq_k, head_sz)
+            v (Tensor): value tensor. Size (..., seq_v, head_sz)
             mask (Tensor): Bool tensor that allows attention.
 
         Returns:
-            Tensor: Attn multiplied with value. Size (..., seq_q, n_heads*head_sz)
+            Tensor: Attn multiplied with value. Size (..., seq_q, head_sz)
         """
         # attn shape will be (bs, n_heads, seq_q, seq_k)
         attn = q @ k.transpose(-1, -2) / (self.head_sz**0.5)
